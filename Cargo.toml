@@ -1,0 +1,70 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "ui/src-tauri"]
+default-members = ["crates/*"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.85"
+authors = ["KZMP Group"]
+license = "GPL-3.0-only"
+repository = "https://github.com/KZMPGroup/Tautra"
+publish = false
+
+[workspace.dependencies]
+tautra-common = { path = "crates/tautra-common" }
+tautra-ipc = { path = "crates/tautra-ipc" }
+tautra-proto = { path = "crates/tautra-proto" }
+tautra-net = { path = "crates/tautra-net" }
+tautra-service = { path = "crates/tautra-service" }
+tautra-input = { path = "crates/tautra-input" }
+tautra-transfer = { path = "crates/tautra-transfer" }
+tautra-clipboard = { path = "crates/tautra-clipboard" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "signal", "fs"] }
+tokio-util = "0.7"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+dirs = "6"
+hostname = "0.4"
+postcard = { version = "1", features = ["use-std"] }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring", "log"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
+mdns-sd = "0.21"
+spake2 = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+windows = "0.62"
+windows-core = "0.62"
+windows-registry = "0.6"
+bytes = "1"
+blake3 = { version = "1", features = ["pure"] }
+png = "0.18"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.quick]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+debug = false

@@ -1,0 +1,45 @@
+[package]
+name = "tautra-net"
+description = "QUIC, discovery mDNS, pairing PIN, auto connect, dan reconnect"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tautra-common.workspace = true
+tautra-ipc.workspace = true
+tautra-proto.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+quinn.workspace = true
+rustls.workspace = true
+rcgen.workspace = true
+mdns-sd.workspace = true
+spake2.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+rand.workspace = true
+base64.workspace = true
+blake3.workspace = true
+flume = { version = "0.12", default-features = false, features = ["async"] }
+if-addrs = "0.15"
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_NetworkManagement_QoS",
+    "Win32_Networking_WinSock",
+    "Win32_Networking_NetworkListManager",
+    "Win32_System_Com",
+] }

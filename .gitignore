@@ -1,0 +1,15 @@
+# Rust
+/target/
+
+# Frontend
+/ui/node_modules/
+/ui/dist/
+
+# File hasil generate Tauri
+/ui/src-tauri/gen/
+/ui/src-tauri/target/
+
+/app/
+*.old
+
+.claude
