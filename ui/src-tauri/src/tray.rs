@@ -5,11 +5,10 @@ use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
-use tautra_common::config::Language;
 use tautra_ipc::api::{method, ConnectionStatus, IdleReason, TransferState};
 
 use crate::agent_link::{AgentLink, LinkSnapshot};
-use crate::i18n::{t, with_name, Key};
+use crate::i18n::{t, with, with_name, Key};
 use crate::{commands, window};
 
 const ICON_IDLE: &[u8] = include_bytes!("../icons/tray-idle.png");
@@ -44,18 +43,11 @@ struct TrayState {
 }
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
-    let lang = Language::default();
-    let status = MenuItem::with_id(
-        app,
-        "status",
-        t(lang, Key::AgentOffline),
-        false,
-        None::<&str>,
-    )?;
-    let open = MenuItem::with_id(app, "open", t(lang, Key::Open), true, None::<&str>)?;
-    let toggle = MenuItem::with_id(app, "toggle", t(lang, Key::Disconnect), false, None::<&str>)?;
-    let gaming = CheckMenuItem::with_id(app, "gaming", t(lang, Key::Gaming), false, false, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", t(lang, Key::Quit), true, None::<&str>)?;
+    let status = MenuItem::with_id(app, "status", t(Key::AgentOffline), false, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", t(Key::Open), true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, "toggle", t(Key::Disconnect), false, None::<&str>)?;
+    let gaming = CheckMenuItem::with_id(app, "gaming", t(Key::Gaming), false, false, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", t(Key::Quit), true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[
@@ -106,37 +98,29 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn describe(snapshot: &LinkSnapshot, lang: Language) -> (String, IconKind, Toggle) {
+fn describe(snapshot: &LinkSnapshot) -> (String, IconKind, Toggle) {
     let Some(status) = snapshot.status.as_ref().filter(|_| snapshot.connected) else {
-        return (
-            t(lang, Key::AgentOffline).into(),
-            IconKind::Error,
-            Toggle::None,
-        );
+        return (t(Key::AgentOffline), IconKind::Error, Toggle::None);
     };
     match &status.connection {
         ConnectionStatus::Idle {
             reason: IdleReason::Starting,
-        } => (t(lang, Key::Starting).into(), IconKind::Idle, Toggle::None),
-        ConnectionStatus::Idle { .. } => (t(lang, Key::Idle).into(), IconKind::Idle, Toggle::None),
-        ConnectionStatus::Searching => (
-            t(lang, Key::Searching).into(),
-            IconKind::Searching,
-            Toggle::None,
-        ),
+        } => (t(Key::Starting), IconKind::Idle, Toggle::None),
+        ConnectionStatus::Idle { .. } => (t(Key::Idle), IconKind::Idle, Toggle::None),
+        ConnectionStatus::Searching => (t(Key::Searching), IconKind::Searching, Toggle::None),
         ConnectionStatus::Connecting { device_name, .. } => (
-            with_name(lang, Key::Connecting, device_name),
+            with_name(Key::Connecting, device_name),
             IconKind::Searching,
             Toggle::Disconnect,
         ),
         ConnectionStatus::Connected(peer) => (
-            with_name(lang, Key::Connected, &peer.device_name),
+            with_name(Key::Connected, &peer.device_name),
             IconKind::Connected,
             Toggle::Disconnect,
         ),
-        ConnectionStatus::Paused => (t(lang, Key::Paused).into(), IconKind::Idle, Toggle::Resume),
+        ConnectionStatus::Paused => (t(Key::Paused), IconKind::Idle, Toggle::Resume),
         ConnectionStatus::Error { message, .. } => (
-            format!("{}: {message}", t(lang, Key::Error)),
+            format!("{}: {message}", t(Key::Error)),
             IconKind::Error,
             Toggle::None,
         ),
@@ -159,31 +143,31 @@ fn transfer_progress(snapshot: &LinkSnapshot) -> Option<u64> {
     Some(done * 100 / total)
 }
 
-pub fn update(app: &AppHandle, snapshot: &LinkSnapshot, lang: Language) {
+pub fn update(app: &AppHandle, snapshot: &LinkSnapshot) {
     let Some(state) = app.try_state::<TrayState>() else {
         return;
     };
-    let (label, icon, toggle) = describe(snapshot, lang);
+    let (label, icon, toggle) = describe(snapshot);
     let _ = state.status.set_text(format!("Tautra: {label}"));
     let tooltip = match transfer_progress(snapshot) {
         Some(percent) => format!(
             "Tautra — {label} · {}",
-            with_name(lang, Key::TrayTransfers, &format!("{percent}%"))
+            with(Key::TrayTransfers, "percent", &format!("{percent}%"))
         ),
         None => format!("Tautra — {label}"),
     };
     let _ = state.tray.set_tooltip(Some(tooltip));
-    let _ = state.open.set_text(t(lang, Key::Open));
-    let _ = state.quit.set_text(t(lang, Key::Quit));
+    let _ = state.open.set_text(t(Key::Open));
+    let _ = state.quit.set_text(t(Key::Quit));
     let _ = state.toggle.set_text(match toggle {
-        Toggle::Resume => t(lang, Key::Resume),
-        _ => t(lang, Key::Disconnect),
+        Toggle::Resume => t(Key::Resume),
+        _ => t(Key::Disconnect),
     });
     let _ = state.toggle.set_enabled(toggle != Toggle::None);
     *state.toggle_action.lock().expect("tray lock") = toggle;
 
     let kvm = snapshot.status.as_ref().filter(|_| snapshot.connected).map(|s| &s.kvm);
-    let _ = state.gaming.set_text(t(lang, Key::Gaming));
+    let _ = state.gaming.set_text(t(Key::Gaming));
     let _ = state.gaming.set_enabled(kvm.is_some());
     let _ = state.gaming.set_checked(kvm.map(|k| k.gaming).unwrap_or(false));
 

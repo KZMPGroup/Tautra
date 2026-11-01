@@ -4338,7 +4338,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-agent"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4364,7 +4364,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-clipboard"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "png",
  "tautra-proto",
@@ -4376,7 +4376,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-common"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "dirs 6.0.0",
@@ -4393,7 +4393,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-input"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "tautra-common",
  "tautra-proto",
@@ -4404,7 +4404,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-ipc"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "futures-util",
  "serde",
@@ -4419,7 +4419,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-net"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4449,7 +4449,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-proto"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "postcard",
  "serde",
@@ -4458,7 +4458,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-service"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4474,7 +4474,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-transfer"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "blake3",
  "bytes",
@@ -4491,7 +4491,7 @@ dependencies = [
 
 [[package]]
 name = "tautra-ui"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "serde",

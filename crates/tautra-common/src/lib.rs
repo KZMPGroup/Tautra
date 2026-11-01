@@ -5,6 +5,7 @@ pub mod config;
 #[cfg(windows)]
 pub mod dpapi;
 pub mod hotkey;
+pub mod locale;
 pub mod logging;
 pub mod paths;
 pub mod time;

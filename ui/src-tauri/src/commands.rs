@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -9,7 +10,7 @@ use tautra_ipc::api::method;
 use tautra_ipc::pipe::IpcError;
 
 use crate::agent_link::{AgentLink, LinkSnapshot};
-use crate::window;
+use crate::{i18n, tray, window};
 
 const SHOW_FALLBACK: Duration = Duration::from_secs(3);
 
@@ -70,6 +71,7 @@ impl From<IpcError> for UiError {
 pub struct UiInfo {
     pub mica: bool,
     pub version: String,
+    pub languages: Vec<String>,
 }
 
 #[tauri::command]
@@ -101,6 +103,14 @@ pub fn ui_info(state: State<'_, UiState>) -> UiInfo {
     UiInfo {
         mica: state.mica,
         version: tautra_common::build::version_string(),
+        languages: tautra_common::locale::ui_languages(),
+    }
+}
+
+#[tauri::command]
+pub fn set_tray_strings(app: AppHandle, link: State<'_, AgentLink>, strings: HashMap<String, String>) {
+    if i18n::set(strings) {
+        tray::update(&app, &link.snapshot());
     }
 }
 

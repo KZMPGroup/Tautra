@@ -1,15 +1,23 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { useAgent } from "../lib/agent";
-import type { Language, UiError } from "../lib/types";
-import { strings, type Strings } from "./strings";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { setTrayStrings, useAgent } from "../lib/agent";
+import type { UiError } from "../lib/types";
+import en, { type Strings } from "./en";
+import { intlLocale, languageInfo, loadStrings, rememberLanguage, resolveLanguage } from "./languages";
 
-interface I18n {
-  lang: Language;
-  locale: string;
+export interface LoadedLanguage {
+  code: string;
   t: Strings;
 }
 
-const I18nContext = createContext<I18n>({ lang: "id", locale: "id-ID", t: strings.id });
+interface I18n {
+  code: string;
+  system: string;
+  locale: string;
+  dir: "ltr" | "rtl";
+  t: Strings;
+}
+
+const I18nContext = createContext<I18n>({ code: "en", system: "en", locale: "en", dir: "ltr", t: en });
 
 export function fmt(text: string, vars: Record<string, string | number>): string {
   return text.replace(/\{(\w+)\}/g, (match, key: string) =>
@@ -17,18 +25,42 @@ export function fmt(text: string, vars: Record<string, string | number>): string
   );
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
+export function I18nProvider({
+  system,
+  initial,
+  children,
+}: {
+  system: string;
+  initial: LoadedLanguage;
+  children: ReactNode;
+}) {
   const { config } = useAgent();
-  const lang: Language = config?.general.language ?? "id";
+  const [loaded, setLoaded] = useState(initial);
+  const preference = config?.general.language;
+  const code = preference === undefined ? loaded.code : resolveLanguage(preference, system);
 
   useEffect(() => {
-    document.documentElement.lang = lang;
-  }, [lang]);
+    if (loaded.code === code) return;
+    let alive = true;
+    void loadStrings(code).then((t) => {
+      if (alive) setLoaded({ code, t });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [code, loaded.code]);
 
-  const value = useMemo<I18n>(
-    () => ({ lang, locale: lang === "id" ? "id-ID" : "en-US", t: strings[lang] }),
-    [lang],
-  );
+  const value = useMemo<I18n>(() => {
+    const info = languageInfo(loaded.code);
+    return { code: info.code, system, locale: intlLocale(info), dir: info.rtl ? "rtl" : "ltr", t: loaded.t };
+  }, [loaded, system]);
+
+  useEffect(() => {
+    document.documentElement.lang = value.code;
+    document.documentElement.dir = value.dir;
+    rememberLanguage(value.code);
+    setTrayStrings(value.t.tray).catch((err) => console.error("set_tray_strings gagal", err));
+  }, [value]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

@@ -1,5 +1,5 @@
 import { fmt } from "../i18n";
-import type { Strings } from "../i18n/strings";
+import type { Strings } from "../i18n/en";
 import type { LinkSnapshot } from "./types";
 
 export type Tone = "ok" | "busy" | "idle" | "warn" | "error";

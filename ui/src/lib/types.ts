@@ -1,8 +1,6 @@
-export type Language = "id" | "en";
-
 export interface GeneralConfig {
   device_name: string;
-  language: Language;
+  language: string;
   autostart: boolean;
 }
 
@@ -173,6 +171,7 @@ export interface LinkSnapshot {
 export interface UiInfo {
   mica: boolean;
   version: string;
+  languages: string[];
 }
 
 export interface UiError {

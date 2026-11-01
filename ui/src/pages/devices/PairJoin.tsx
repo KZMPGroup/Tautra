@@ -147,7 +147,7 @@ export function PairJoin({ discovered, joiningName, onBack }: PairJoinProps) {
                   setPin("");
                   join.clear();
                 }}
-                className="flex w-full items-center gap-3 rounded-lg bg-white/80 px-3.5 py-3 text-left ring-1 ring-black/10 transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-indigo-500 dark:bg-white/5 dark:ring-white/10 dark:hover:bg-white/10"
+                className="flex w-full items-center gap-3 rounded-lg bg-white/80 px-3.5 py-3 text-start ring-1 ring-black/10 transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-indigo-500 dark:bg-white/5 dark:ring-white/10 dark:hover:bg-white/10"
               >
                 <Icon name="devices" className="size-5 text-indigo-600 dark:text-indigo-400" />
                 <span className="min-w-0 flex-1">

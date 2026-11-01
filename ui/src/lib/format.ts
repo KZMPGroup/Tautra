@@ -30,11 +30,11 @@ export function duration(ms: number, locale: string): string {
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  const id = locale.startsWith("id");
-  const [uh, um, us] = id ? ["j", "mnt", "dtk"] : ["h", "min", "s"];
-  if (h > 0) return `${h} ${uh} ${m} ${um}`;
-  if (m > 0) return `${m} ${um} ${s} ${us}`;
-  return `${s} ${us}`;
+  const part = (value: number, unit: "hour" | "minute" | "second") =>
+    new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short" }).format(value);
+  if (h > 0) return `${part(h, "hour")} ${part(m, "minute")}`;
+  if (m > 0) return `${part(m, "minute")} ${part(s, "second")}`;
+  return part(s, "second");
 }
 
 export function countdown(ms: number): string {

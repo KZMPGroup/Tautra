@@ -20,7 +20,7 @@ Spesifikasi lengkap: [`PRD.md`](PRD.md).
 - [x] `tautra-proto`: tipe pesan antar perangkat + framing postcard
 - [x] `tautra-agent`: single instance, auto-start saat login (registry `Run`), server IPC, status
 - [x] UI Tauri (`tautra-ui`): tray icon, window pengaturan, koneksi ke agent, menjalankan agent bila belum hidup
-- [x] UI React + Tailwind (rem/%/vw/vh), i18n Indonesia/English, tema gelap/terang mengikuti Windows
+- [x] UI React + Tailwind (rem/%/vw/vh), i18n 25 bahasa (default mengikuti bahasa Windows, fallback English), tema gelap/terang mengikuti Windows
 - [x] **Kriteria:** agent auto-start saat login, UI menampilkan status dari agent *(lolos uji pengguna 2026-10-26)*
 
 ### Fase 1 — Discovery, Pairing, Auto Connect (F1)

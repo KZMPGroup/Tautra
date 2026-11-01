@@ -48,7 +48,8 @@ All traffic runs peer to peer, directly between the two devices, over QUIC with 
 **Maintenance**
 - Peer-to-peer auto update: when one device runs a newer build, the other pulls it and restarts itself.
 - Log files are capped in size and cleaned up automatically.
-- The UI is in Indonesian and English, with light and dark themes and a tray icon.
+- The UI, tray menu and notifications come in 25 languages. Tautra starts in the Windows display language, falls back to English, and the language can be changed and searched under **General**.
+- Light and dark themes and a tray icon.
 
 ## Requirements
 

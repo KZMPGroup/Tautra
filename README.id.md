@@ -42,7 +42,8 @@ Semua lalu lintas berjalan langsung antar perangkat (peer to peer) lewat QUIC da
 **Perawatan**
 - Auto update antar perangkat: perangkat dengan build lebih lama otomatis mengambil build terbaru dari perangkat lain.
 - Ukuran log dibatasi dan file log lama dibersihkan otomatis.
-- Tampilan dalam bahasa Indonesia dan Inggris, tema terang dan gelap, serta ikon tray.
+- Tampilan, menu tray, dan notifikasi tersedia dalam 25 bahasa. Tautra otomatis memakai bahasa tampilan Windows (bahasa Inggris jika bahasa itu belum tersedia), dan bahasa bisa diganti serta dicari di halaman **Umum**.
+- Tema terang dan gelap, serta ikon tray.
 
 ## Kebutuhan
 

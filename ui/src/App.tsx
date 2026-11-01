@@ -21,7 +21,7 @@ export default function App({ info }: { info: UiInfo }) {
   return (
     <div className={`flex h-screen text-neutral-900 dark:text-neutral-100 ${background}`}>
       <Sidebar page={page} onNavigate={setPage} />
-      <main className="min-w-0 flex-1 overflow-y-auto rounded-tl-xl bg-white/40 ring-1 ring-black/5 dark:bg-black/15 dark:ring-white/5">
+      <main className="min-w-0 flex-1 overflow-y-auto rounded-ss-xl bg-white/40 ring-1 ring-black/5 dark:bg-black/15 dark:ring-white/5">
         <div className="mx-auto w-full max-w-4xl px-8 py-7">
           {page === "home" && <Home onNavigate={setPage} />}
           {page === "devices" && <Devices />}

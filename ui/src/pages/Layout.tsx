@@ -244,6 +244,7 @@ function LayoutEditor({ view }: { view: LayoutView }) {
       <Card title={t.layout.title} description={t.layout.intro}>
         <div
           ref={canvasRef}
+          dir="ltr"
           role="group"
           aria-label={t.layout.canvasLabel}
           className="relative w-full touch-none select-none overflow-hidden rounded-lg bg-neutral-100 ring-1 ring-black/5 dark:bg-black/25 dark:ring-white/10"
@@ -276,20 +277,22 @@ function LayoutEditor({ view }: { view: LayoutView }) {
               <span className="text-sm text-neutral-700 dark:text-neutral-300">
                 {fmt(t.layout.nudgeTitle, { name: peer.device_name })}
               </span>
-              {steps.map((step) => (
-                <button
-                  key={step.amount}
-                  type="button"
-                  aria-label={fmt(vertical ? t.layout.nudgeVertical : t.layout.nudgeHorizontal, {
-                    name: peer.device_name,
-                    amount: step.amount,
-                  })}
-                  onClick={() => nudge(peer, vertical ? { x: 0, y: step.amount } : { x: step.amount, y: 0 })}
-                  className="min-w-10 rounded-md bg-white/80 px-2.5 py-1.5 text-sm font-medium text-neutral-800 ring-1 ring-black/10 transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:bg-white/10 dark:text-neutral-100 dark:ring-white/10 dark:hover:bg-white/15"
-                >
-                  {step.label}
-                </button>
-              ))}
+              <span dir="ltr" className="flex flex-wrap gap-2">
+                {steps.map((step) => (
+                  <button
+                    key={step.amount}
+                    type="button"
+                    aria-label={fmt(vertical ? t.layout.nudgeVertical : t.layout.nudgeHorizontal, {
+                      name: peer.device_name,
+                      amount: step.amount,
+                    })}
+                    onClick={() => nudge(peer, vertical ? { x: 0, y: step.amount } : { x: step.amount, y: 0 })}
+                    className="min-w-10 rounded-md bg-white/80 px-2.5 py-1.5 text-sm font-medium text-neutral-800 ring-1 ring-black/10 transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:bg-white/10 dark:text-neutral-100 dark:ring-white/10 dark:hover:bg-white/15"
+                  >
+                    {step.label}
+                  </button>
+                ))}
+              </span>
             </div>
           )}
         </div>
@@ -309,7 +312,7 @@ function LayoutEditor({ view }: { view: LayoutView }) {
                   setSaved(false);
                   setHost(d.device_id);
                 }}
-                className={`flex items-center gap-3 rounded-lg px-4 py-3 text-left ring-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+                className={`flex items-center gap-3 rounded-lg px-4 py-3 text-start ring-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
                   checked
                     ? "bg-indigo-50 ring-2 ring-indigo-500 dark:bg-indigo-500/15"
                     : "bg-white/60 ring-black/10 hover:bg-white dark:bg-white/5 dark:ring-white/10 dark:hover:bg-white/10"

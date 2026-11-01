@@ -15,6 +15,10 @@ pub const MIN_CLIPBOARD_MB: u32 = 1;
 
 pub const MAX_CLIPBOARD_MB: u32 = 1024;
 
+pub const LANGUAGE_AUTO: &str = "auto";
+
+pub const MAX_LANGUAGE_LEN: usize = 16;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
@@ -28,7 +32,7 @@ pub struct Config {
 #[serde(default)]
 pub struct GeneralConfig {
     pub device_name: String,
-    pub language: Language,
+    pub language: String,
     pub autostart: bool,
 }
 
@@ -36,18 +40,10 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             device_name: String::new(),
-            language: Language::Id,
+            language: LANGUAGE_AUTO.into(),
             autostart: true,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum Language {
-    #[default]
-    Id,
-    En,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -180,6 +176,16 @@ impl Config {
             return Err(ConfigError::Invalid {
                 field: "share.max_clipboard_mb",
                 reason: format!("harus {MIN_CLIPBOARD_MB}–{MAX_CLIPBOARD_MB} MB"),
+            });
+        }
+        let language = &self.general.language;
+        if language.is_empty()
+            || language.len() > MAX_LANGUAGE_LEN
+            || !language.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            return Err(ConfigError::Invalid {
+                field: "general.language",
+                reason: format!("kode bahasa tidak dikenal: {language}"),
             });
         }
         let name = self.general.device_name.trim();

@@ -99,14 +99,14 @@ export function Sidebar({ page, onNavigate }: SidebarProps) {
             type="button"
             aria-current={active ? "page" : undefined}
             onClick={() => onNavigate(item.page)}
-            className={`relative flex items-center gap-3 rounded-md px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500 ${
+            className={`relative flex items-center gap-3 rounded-md px-2.5 py-2 text-start text-sm transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500 ${
               active
                 ? "bg-black/5 font-medium text-neutral-900 dark:bg-white/10 dark:text-neutral-50"
                 : "text-neutral-700 hover:bg-black/4 dark:text-neutral-300 dark:hover:bg-white/5"
             }`}
           >
             {active && (
-              <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400" />
+              <span className="absolute inset-y-2 start-0 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400" />
             )}
             <Icon name={item.icon} className="size-4.5" />
             {t.nav[item.page]}

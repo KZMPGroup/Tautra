@@ -7,7 +7,7 @@ import { Field, inputClass, Toggle } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/PageHeader";
 import { fmt, useI18n } from "../i18n";
-import type { Strings } from "../i18n/strings";
+import type { Strings } from "../i18n/en";
 import { agentCall, Method, useAction, useAgent, useNow } from "../lib/agent";
 import { useConfigSaver } from "../lib/config";
 import { bytes, relativeTime } from "../lib/format";
@@ -317,7 +317,7 @@ function TransferRow({ transfer }: { transfer: TransferView }) {
         </div>
       </div>
       {active && (
-        <div className="grid gap-1 pl-8">
+        <div className="grid gap-1 ps-8">
           <div
             role="progressbar"
             aria-label={transfer.name}
@@ -339,10 +339,10 @@ function TransferRow({ transfer }: { transfer: TransferView }) {
         </div>
       )}
       {transfer.state === "failed" && transfer.error && (
-        <p className="selectable pl-8 text-xs break-words text-red-700 dark:text-red-400">{transfer.error}</p>
+        <p className="selectable ps-8 text-xs break-words text-red-700 dark:text-red-400">{transfer.error}</p>
       )}
       {action.error && (
-        <div className="pl-8">
+        <div className="ps-8">
           <ErrorMessage error={action.error} onDismiss={action.clear} />
         </div>
       )}

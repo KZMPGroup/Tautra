@@ -72,6 +72,10 @@ export function getUiInfo(): Promise<UiInfo> {
   return invoke<UiInfo>("ui_info");
 }
 
+export function setTrayStrings(strings: Record<string, string>): Promise<void> {
+  return invoke("set_tray_strings", { strings });
+}
+
 export function notifyUiReady(): Promise<void> {
   return invoke("ui_ready");
 }

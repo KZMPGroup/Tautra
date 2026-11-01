@@ -25,7 +25,7 @@ export function ErrorMessage({ error, onDismiss }: ErrorMessageProps) {
           </p>
         )}
       </div>
-      {onDismiss && <IconButton icon="x" label={t.common.dismiss} onClick={onDismiss} className="-my-1 -mr-1.5" />}
+      {onDismiss && <IconButton icon="x" label={t.common.dismiss} onClick={onDismiss} className="-my-1 -me-1.5" />}
     </div>
   );
 }

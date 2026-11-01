@@ -35,6 +35,7 @@ fn main() {
             commands::agent_snapshot,
             commands::start_agent,
             commands::ui_info,
+            commands::set_tray_strings,
             commands::ui_ready,
             commands::open_folder,
             commands::quit_app,

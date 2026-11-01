@@ -31,7 +31,12 @@ Tautra needs two Windows devices to test anything that crosses the network. A de
 - Make sure `cargo clippy --workspace` passes with no warnings, and `npm run build` succeeds in `ui`.
 - Code style follows the existing code: `rustfmt` defaults for Rust, and Tailwind CSS with relative units (`rem`, `%`, `vw`, `vh`) instead of `px` in the UI.
 - Protocol changes must bump `PROTOCOL_VERSION` in `tautra-proto`, because devices only connect when their builds match.
-- Add any new user-facing text to both the Indonesian and English strings in `ui/src/i18n/strings.ts`.
+- Add new user-facing text to `ui/src/i18n/en.ts` first. Every file in `ui/src/i18n/locales/` is type-checked against it, so the build fails until each language has the new key.
+- To add a language, copy a file in `ui/src/i18n/locales/`, name it after the language tag (for example `sv.ts`), translate it, and add an entry to `LANGUAGES` in `ui/src/i18n/languages.ts`.
+
+## Translations
+
+The 25 bundled translations were written with machine help and have not all been checked by native speakers. Corrections are welcome as pull requests that touch only the file for that language.
 
 ## License
 

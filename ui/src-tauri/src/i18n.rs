@@ -1,4 +1,7 @@
-use tautra_common::config::Language;
+use std::collections::HashMap;
+use std::sync::RwLock;
+
+static STRINGS: RwLock<Option<HashMap<String, String>>> = RwLock::new(None);
 
 #[derive(Clone, Copy)]
 pub enum Key {
@@ -35,78 +38,76 @@ pub enum Key {
     TrayTransfers,
 }
 
-pub fn t(lang: Language, key: Key) -> &'static str {
-    use Key::*;
-    match lang {
-        Language::Id => match key {
-            Open => "Buka Tautra",
-            Disconnect => "Putuskan",
-            Resume => "Sambungkan",
-            Gaming => "Gaming Mode",
-            Quit => "Keluar",
-            AgentOffline => "Agent tidak berjalan",
-            Starting => "Memulai…",
-            Idle => "Idle",
-            Searching => "Mencari perangkat…",
-            Connecting => "Menyambungkan ke {name}…",
-            Connected => "Tersambung ke {name}",
-            Paused => "Dijeda",
-            Error => "Error",
-            ToastConnectedTitle => "Tersambung",
-            ToastConnectedBody => "Tersambung ke {name}",
-            ToastDisconnectedTitle => "Terputus",
-            ToastDisconnectedBody => "Koneksi ke {name} terputus",
-            ToastPairedTitle => "Pairing berhasil",
-            ToastPairedBody => "{name} sekarang perangkat trusted",
-            ToastIncomingTitle => "Menerima file",
-            ToastOutgoingTitle => "Mengirim file",
-            ToastTransferRunning => "{name} sedang ditransfer. Progresnya ada di halaman Clipboard & file.",
-            ToastTransferDoneTitle => "Transfer selesai",
-            ToastTransferDone => "{name} selesai ditransfer",
-            ToastTransferFailedTitle => "Transfer gagal",
-            ToastTransferFailed => "{name} gagal ditransfer",
-            ToastFailedTitle => "Gagal mengirim file",
-            ToastMoreFailures => " (dan {name} kegagalan lain)",
-            ToastUpdatedTitle => "Tautra diperbarui",
-            ToastUpdatedBody => "Versi baru diterima dari perangkat lain. Tautra dijalankan ulang.",
-            TrayTransfers => "transfer {name}",
-        },
-        Language::En => match key {
-            Open => "Open Tautra",
-            Disconnect => "Disconnect",
-            Resume => "Connect",
-            Gaming => "Gaming Mode",
-            Quit => "Quit",
-            AgentOffline => "Agent is not running",
-            Starting => "Starting…",
-            Idle => "Idle",
-            Searching => "Searching for devices…",
-            Connecting => "Connecting to {name}…",
-            Connected => "Connected to {name}",
-            Paused => "Paused",
-            Error => "Error",
-            ToastConnectedTitle => "Connected",
-            ToastConnectedBody => "Connected to {name}",
-            ToastDisconnectedTitle => "Disconnected",
-            ToastDisconnectedBody => "Connection to {name} was lost",
-            ToastPairedTitle => "Pairing succeeded",
-            ToastPairedBody => "{name} is now a trusted device",
-            ToastIncomingTitle => "Receiving files",
-            ToastOutgoingTitle => "Sending files",
-            ToastTransferRunning => "{name} is being transferred. Progress is on the Clipboard & files page.",
-            ToastTransferDoneTitle => "Transfer complete",
-            ToastTransferDone => "{name} was transferred",
-            ToastTransferFailedTitle => "Transfer failed",
-            ToastTransferFailed => "{name} could not be transferred",
-            ToastFailedTitle => "File could not be sent",
-            ToastMoreFailures => " (and {name} more failures)",
-            ToastUpdatedTitle => "Tautra updated",
-            ToastUpdatedBody => "A newer version was received from the other device. Tautra is restarting.",
-            TrayTransfers => "transfer {name}",
-        },
+impl Key {
+    fn entry(self) -> (&'static str, &'static str) {
+        use Key::*;
+        match self {
+            Open => ("open", "Open Tautra"),
+            Disconnect => ("disconnect", "Disconnect"),
+            Resume => ("resume", "Connect"),
+            Gaming => ("gaming", "Gaming Mode"),
+            Quit => ("quit", "Quit"),
+            AgentOffline => ("agentOffline", "Agent is not running"),
+            Starting => ("starting", "Starting…"),
+            Idle => ("idle", "Idle"),
+            Searching => ("searching", "Searching for devices…"),
+            Connecting => ("connecting", "Connecting to {name}…"),
+            Connected => ("connected", "Connected to {name}"),
+            Paused => ("paused", "Paused"),
+            Error => ("error", "Error"),
+            ToastConnectedTitle => ("connectedTitle", "Connected"),
+            ToastConnectedBody => ("connectedBody", "Connected to {name}"),
+            ToastDisconnectedTitle => ("disconnectedTitle", "Disconnected"),
+            ToastDisconnectedBody => ("disconnectedBody", "Connection to {name} was lost"),
+            ToastPairedTitle => ("pairedTitle", "Pairing succeeded"),
+            ToastPairedBody => ("pairedBody", "{name} is now a trusted device"),
+            ToastIncomingTitle => ("incomingTitle", "Receiving files"),
+            ToastOutgoingTitle => ("outgoingTitle", "Sending files"),
+            ToastTransferRunning => (
+                "transferRunning",
+                "{name} is being transferred. Progress is on the Clipboard & files page.",
+            ),
+            ToastTransferDoneTitle => ("transferDoneTitle", "Transfer complete"),
+            ToastTransferDone => ("transferDone", "{name} was transferred"),
+            ToastTransferFailedTitle => ("transferFailedTitle", "Transfer failed"),
+            ToastTransferFailed => ("transferFailed", "{name} could not be transferred"),
+            ToastFailedTitle => ("failedTitle", "File could not be sent"),
+            ToastMoreFailures => ("moreFailures", " (and {count} more failures)"),
+            ToastUpdatedTitle => ("updatedTitle", "Tautra updated"),
+            ToastUpdatedBody => (
+                "updatedBody",
+                "A newer version was received from the other device. Tautra is restarting.",
+            ),
+            TrayTransfers => ("transfers", "transfer {percent}"),
+        }
     }
 }
 
-pub fn with_name(lang: Language, key: Key, name: &str) -> String {
-    t(lang, key).replace("{name}", name)
+pub fn set(strings: HashMap<String, String>) -> bool {
+    let mut current = STRINGS.write().unwrap_or_else(|e| e.into_inner());
+    if current.as_ref() == Some(&strings) {
+        return false;
+    }
+    *current = Some(strings);
+    true
+}
+
+pub fn t(key: Key) -> String {
+    let (name, english) = key.entry();
+    STRINGS
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .and_then(|strings| strings.get(name))
+        .filter(|text| !text.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| english.to_string())
+}
+
+pub fn with(key: Key, var: &str, value: &str) -> String {
+    t(key).replace(&format!("{{{var}}}"), value)
+}
+
+pub fn with_name(key: Key, name: &str) -> String {
+    with(key, "name", name)
 }

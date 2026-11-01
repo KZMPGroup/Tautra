@@ -6,7 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
-use tautra_common::config::{Config, Language};
+use tautra_common::config::Config;
 use tautra_ipc::api::{
     app_error, method, notification, AgentStatus, ConnectionStatus, Notice, PairingStatus,
     TransferDirection, TransferState, TransferView, UpdateAppliedParams,
@@ -14,7 +14,7 @@ use tautra_ipc::api::{
 use tautra_ipc::pipe::{IpcClient, IpcError};
 use tautra_ipc::PIPE_NAME;
 
-use crate::i18n::{t, with_name, Key};
+use crate::i18n::{t, with, with_name, Key};
 use crate::{autostart, tray};
 
 pub const SNAPSHOT_EVENT: &str = "agent://snapshot";
@@ -73,14 +73,6 @@ impl AgentLink {
             config: s.config.clone(),
             error: s.error.clone(),
         }
-    }
-
-    pub fn language(&self) -> Language {
-        self.lock()
-            .config
-            .as_ref()
-            .map(|c| c.general.language)
-            .unwrap_or_default()
     }
 
     pub async fn call(&self, name: &str, params: Value) -> Result<Value, IpcError> {
@@ -179,8 +171,7 @@ impl AgentLink {
 
     fn restart_later(&self) {
         let app = self.app.clone();
-        let lang = self.language();
-        self.toast(t(lang, Key::ToastUpdatedTitle), t(lang, Key::ToastUpdatedBody));
+        self.toast(&t(Key::ToastUpdatedTitle), &t(Key::ToastUpdatedBody));
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(RESTART_DELAY).await;
             tracing::info!("UI dijalankan ulang setelah pembaruan");
@@ -231,12 +222,11 @@ impl AgentLink {
         let Some(first) = fresh.first() else {
             return;
         };
-        let lang = self.language();
         let mut body = first.message.clone();
         if fresh.len() > 1 {
-            body.push_str(&with_name(lang, Key::ToastMoreFailures, &(fresh.len() - 1).to_string()));
+            body.push_str(&with(Key::ToastMoreFailures, "count", &(fresh.len() - 1).to_string()));
         }
-        self.toast(t(lang, Key::ToastFailedTitle), &body);
+        self.toast(&t(Key::ToastFailedTitle), &body);
     }
 
     fn set_config(&self, config: Config) {
@@ -255,7 +245,7 @@ impl AgentLink {
 
     fn publish(&self) {
         let snapshot = self.snapshot();
-        tray::update(&self.app, &snapshot, self.language());
+        tray::update(&self.app, &snapshot);
         let _ = self.app.emit(SNAPSHOT_EVENT, &snapshot);
     }
 
@@ -263,25 +253,24 @@ impl AgentLink {
         let Some(previous) = previous else {
             return;
         };
-        let lang = self.language();
         match (&previous.connection, &next.connection) {
             (ConnectionStatus::Connected(a), ConnectionStatus::Connected(b))
                 if a.device_id == b.device_id => {}
             (_, ConnectionStatus::Connected(peer)) => self.toast(
-                t(lang, Key::ToastConnectedTitle),
-                &with_name(lang, Key::ToastConnectedBody, &peer.device_name),
+                &t(Key::ToastConnectedTitle),
+                &with_name(Key::ToastConnectedBody, &peer.device_name),
             ),
             (ConnectionStatus::Connected(peer), _) => self.toast(
-                t(lang, Key::ToastDisconnectedTitle),
-                &with_name(lang, Key::ToastDisconnectedBody, &peer.device_name),
+                &t(Key::ToastDisconnectedTitle),
+                &with_name(Key::ToastDisconnectedBody, &peer.device_name),
             ),
             _ => {}
         }
         if let PairingStatus::Succeeded { device_name, .. } = &next.pairing {
             if !matches!(previous.pairing, PairingStatus::Succeeded { .. }) {
                 self.toast(
-                    t(lang, Key::ToastPairedTitle),
-                    &with_name(lang, Key::ToastPairedBody, device_name),
+                    &t(Key::ToastPairedTitle),
+                    &with_name(Key::ToastPairedBody, device_name),
                 );
             }
         }
@@ -335,7 +324,6 @@ impl AgentLink {
                 }
             }
         }
-        let lang = self.language();
         for (transfer, started) in toasts {
             let (title, body) = if started {
                 let title = match transfer.direction {
@@ -348,12 +336,12 @@ impl AgentLink {
             } else {
                 (Key::ToastTransferDoneTitle, Key::ToastTransferDone)
             };
-            let mut text = with_name(lang, body, &transfer.name);
+            let mut text = with_name(body, &transfer.name);
             if let Some(error) = transfer.error.as_deref().filter(|_| !started) {
                 text.push_str(": ");
                 text.push_str(error);
             }
-            self.toast(t(lang, title), &text);
+            self.toast(&t(title), &text);
         }
     }
 

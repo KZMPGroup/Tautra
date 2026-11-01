@@ -48,7 +48,7 @@ export function NoticeList({ notices }: { notices: Notice[] }) {
                 label={t.common.dismiss}
                 disabled={dismiss.busy}
                 onClick={() => void dismiss.run(() => agentCall(Method.NoticeDismiss, { id: notice.id }))}
-                className="-my-1 -mr-1.5"
+                className="-my-1 -me-1.5"
               />
             </li>
           );

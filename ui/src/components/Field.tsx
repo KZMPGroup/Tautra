@@ -64,7 +64,7 @@ export function Toggle({ label, hint, checked, disabled, onChange }: ToggleProps
       >
         <span
           className={`inline-block size-3.5 rounded-full bg-white shadow transition-transform ${
-            checked ? "translate-x-5.75" : "translate-x-0.75"
+            checked ? "translate-x-5.75 rtl:-translate-x-5.75" : "translate-x-0.75 rtl:-translate-x-0.75"
           }`}
         />
       </button>
