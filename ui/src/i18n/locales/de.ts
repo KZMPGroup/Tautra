@@ -274,6 +274,7 @@ const strings: Strings = {
     languageEmpty: "Keine Sprache passt zu „{query}“.",
     autostart: "Bei der Windows-Anmeldung starten",
     autostartHint: "Agent und Infobereichssymbol starten nach der Anmeldung automatisch.",
+    autostartLogonHint: "Wenn der Tautra-Dienst auf der Seite Eingabe installiert ist, lässt sich dieser PC auch am Windows-Anmeldebildschirm direkt nach dem Start steuern.",
     connectionSection: "Verbindung",
     autoConnect: "Automatisch verbinden",
     autoConnectHint: "Mit vertrauenswürdigen Geräten verbinden, sobald sie im Netzwerk auftauchen.",

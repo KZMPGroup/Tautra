@@ -261,6 +261,7 @@ const strings: Strings = {
     languageEmpty: "Không có ngôn ngữ nào khớp với \"{query}\".",
     autostart: "Khởi động khi đăng nhập Windows",
     autostartHint: "Agent và biểu tượng khay hệ thống tự khởi động sau khi đăng nhập.",
+    autostartLogonHint: "Nếu dịch vụ Tautra đã được cài ở trang Nhập liệu, máy này cũng có thể được điều khiển từ màn hình đăng nhập Windows ngay khi vừa khởi động.",
     connectionSection: "Kết nối",
     autoConnect: "Tự động kết nối",
     autoConnectHint: "Kết nối với thiết bị tin cậy ngay khi chúng xuất hiện trên mạng.",

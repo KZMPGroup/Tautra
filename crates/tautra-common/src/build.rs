@@ -174,3 +174,19 @@ pub fn wait_for_pid(pid: u32, timeout: std::time::Duration) {
     let _ = unsafe { WaitForSingleObject(handle, timeout.as_millis() as u32) };
     let _ = unsafe { CloseHandle(handle) };
 }
+
+#[cfg(windows)]
+pub fn stop_pid(pid: u32, timeout: std::time::Duration) {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
+    use windows::Win32::System::Threading::{
+        OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    };
+    let Ok(handle) = (unsafe { OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_TERMINATE, false, pid) }) else {
+        return;
+    };
+    if unsafe { WaitForSingleObject(handle, timeout.as_millis() as u32) } == WAIT_TIMEOUT {
+        let _ = unsafe { TerminateProcess(handle, 0) };
+        let _ = unsafe { WaitForSingleObject(handle, 2000) };
+    }
+    let _ = unsafe { CloseHandle(handle) };
+}

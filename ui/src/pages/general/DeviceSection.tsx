@@ -63,7 +63,7 @@ export function DeviceSection({ config, effectiveName }: { config: Config; effec
         <div className="border-t border-black/5 pt-4 dark:border-white/10">
           <Toggle
             label={t.general.autostart}
-            hint={t.general.autostartHint}
+            hint={`${t.general.autostartHint} ${t.general.autostartLogonHint}`}
             checked={config.general.autostart}
             disabled={saver.busy}
             onChange={(autostart) => void saver.save((c) => ({ ...c, general: { ...c.general, autostart } }))}

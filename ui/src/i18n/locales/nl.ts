@@ -270,6 +270,7 @@ const strings: Strings = {
     languageEmpty: "Geen taal komt overeen met \"{query}\".",
     autostart: "Starten bij aanmelden bij Windows",
     autostartHint: "De agent en het systeemvakpictogram starten automatisch na het aanmelden.",
+    autostartLogonHint: "Als de Tautra-service op de pagina Invoer is geïnstalleerd, kan deze pc ook vanaf het Windows-aanmeldscherm worden bediend, direct na het opstarten.",
     connectionSection: "Verbinding",
     autoConnect: "Automatisch verbinden",
     autoConnectHint: "Verbinden met vertrouwde apparaten zodra ze op het netwerk verschijnen.",

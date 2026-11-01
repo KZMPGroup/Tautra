@@ -261,6 +261,7 @@ const strings: Strings = {
     languageEmpty: "\"{query}\"와(과) 일치하는 언어가 없습니다.",
     autostart: "Windows에 로그인할 때 시작",
     autostartHint: "로그인하면 에이전트와 트레이 아이콘이 자동으로 시작됩니다.",
+    autostartLogonHint: "입력 페이지에서 Tautra 서비스를 설치하면, 이 PC를 켠 직후 Windows 로그인 화면에서도 제어할 수 있습니다.",
     connectionSection: "연결",
     autoConnect: "자동 연결",
     autoConnectHint: "신뢰하는 장치가 네트워크에 나타나면 바로 연결합니다.",

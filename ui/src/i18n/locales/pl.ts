@@ -267,6 +267,7 @@ const strings: Strings = {
     languageEmpty: "Żaden język nie pasuje do „{query}”.",
     autostart: "Uruchamiaj po zalogowaniu do Windows",
     autostartHint: "Agent i ikona w zasobniku uruchamiają się automatycznie po zalogowaniu.",
+    autostartLogonHint: "Jeśli na stronie Wejście zainstalowano usługę Tautra, tym komputerem można sterować także z ekranu logowania Windows zaraz po uruchomieniu.",
     connectionSection: "Połączenie",
     autoConnect: "Automatyczne łączenie",
     autoConnectHint: "Łącz z zaufanymi urządzeniami, gdy tylko pojawią się w sieci.",

@@ -66,6 +66,7 @@ pub struct NetOptions {
     pub network: NetworkConfig,
     pub device_name: String,
     pub app_version: String,
+    pub updates: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -319,6 +320,7 @@ pub async fn start(
         trust.clone(),
         internal_tx.clone(),
         paths_rx,
+        opts.updates,
     ));
 
     let mut manager = Manager {
@@ -361,6 +363,7 @@ pub async fn start(
         last_poll: Instant::now(),
         path: PathSwitch::default(),
         update: UpdateState::default(),
+        updates: opts.updates,
         notice_log: HashMap::new(),
         status_tx: None,
         events_tx: events_tx.clone(),
@@ -633,6 +636,7 @@ struct Manager {
 
     path: PathSwitch,
     update: UpdateState,
+    updates: bool,
 
     notice_log: HashMap<(&'static str, String), Instant>,
     status_tx: Option<watch::Sender<NetStatus>>,
@@ -2366,7 +2370,8 @@ impl Manager {
     }
 
     fn maybe_update(&mut self) {
-        if self.update.applied
+        if !self.updates
+            || self.update.applied
             || self.update.task.as_ref().is_some_and(|t| !t.is_finished())
             || self.update.next_attempt.is_some_and(|t| t > Instant::now())
         {
@@ -2485,6 +2490,7 @@ async fn accept_loop(
     trust: Arc<RwLock<TrustStore>>,
     tx: mpsc::Sender<Internal>,
     paths: watch::Receiver<Option<Vec<u128>>>,
+    updates: bool,
 ) {
     while let Some(incoming) = endpoint.accept().await {
         let remote_ip = incoming.remote_address().ip();
@@ -2528,6 +2534,10 @@ async fn accept_loop(
                     return;
                 }
                 Some(alpn) if alpn == ALPN_UPDATE => {
+                    if !updates {
+                        conn.close(close_code::NORMAL.into(), b"no updates");
+                        return;
+                    }
                     let trusted = tls::peer_fingerprint(&conn).is_some_and(|fp| {
                         trust
                             .read()

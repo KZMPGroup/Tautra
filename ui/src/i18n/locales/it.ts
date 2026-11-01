@@ -270,6 +270,7 @@ const strings: Strings = {
     languageEmpty: "Nessuna lingua corrisponde a \"{query}\".",
     autostart: "Avvia all'accesso a Windows",
     autostartHint: "L'agente e l'icona nell'area di notifica si avviano automaticamente dopo l'accesso.",
+    autostartLogonHint: "Se il servizio Tautra è installato dalla pagina Input, questo PC può essere controllato anche dalla schermata di accesso di Windows appena acceso.",
     connectionSection: "Connessione",
     autoConnect: "Connessione automatica",
     autoConnectHint: "Connettiti ai dispositivi attendibili appena compaiono in rete.",

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -48,6 +49,7 @@ struct LinkState {
 pub struct AgentLink {
     app: AppHandle,
     state: Arc<Mutex<LinkState>>,
+    quitting: Arc<AtomicBool>,
 }
 
 impl AgentLink {
@@ -55,6 +57,7 @@ impl AgentLink {
         let link = Self {
             app,
             state: Arc::default(),
+            quitting: Arc::default(),
         };
         let worker = link.clone();
         tauri::async_runtime::spawn(async move { worker.run().await });
@@ -88,7 +91,18 @@ impl AgentLink {
         result
     }
 
+    pub fn begin_quit(&self) {
+        self.quitting.store(true, Ordering::SeqCst);
+    }
+
+    fn quitting(&self) -> bool {
+        self.quitting.load(Ordering::SeqCst)
+    }
+
     pub fn ensure_agent(&self) -> Result<(), String> {
+        if self.quitting() {
+            return Ok(());
+        }
         if self.lock().client.is_some() {
             return Ok(());
         }
@@ -152,7 +166,7 @@ impl AgentLink {
                 }
                 Err(e) => {
                     let not_running = e.raw_os_error() == Some(ERROR_FILE_NOT_FOUND);
-                    if not_running {
+                    if not_running && !self.quitting() {
                         if last_spawn.is_none_or(|t| t.elapsed() > SPAWN_COOLDOWN) {
                             last_spawn = Some(Instant::now());
                             if let Err(err) = spawn_agent() {
@@ -160,7 +174,7 @@ impl AgentLink {
                                 self.set_error(err);
                             }
                         }
-                    } else {
+                    } else if !not_running {
                         self.set_error(format!("Pipe agent tidak bisa dibuka: {e}"));
                     }
                 }

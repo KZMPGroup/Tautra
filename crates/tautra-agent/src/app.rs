@@ -33,6 +33,8 @@ pub struct Agent {
     changed: Notify,
     pub notify_tx: broadcast::Sender<Arc<str>>,
     pub cancel: CancellationToken,
+    pub logon: bool,
+    pub logon_changed: Notify,
 }
 
 impl Agent {
@@ -137,11 +139,12 @@ impl Agent {
             .map_err(|e| RpcError::app(app_error::CONFIG_SAVE_FAILED, e.to_string()))?;
         let old = std::mem::replace(&mut *self.config.lock().expect("config lock"), new.clone());
 
-        if old.general.autostart != new.general.autostart {
+        if old.general.autostart != new.general.autostart && !self.logon {
             if let Err(e) = sync_autostart(new.general.autostart) {
                 self.notice(NoticeLevel::Error, app_error::AUTOSTART_FAILED, e);
             }
         }
+        self.logon_changed.notify_one();
         if let Some(net) = &self.net {
             let name_changed = old.effective_device_name() != new.effective_device_name();
             if old.network != new.network || name_changed {
@@ -172,11 +175,11 @@ fn sync_autostart(enabled: bool) -> Result<(), String> {
     autostart::set_entry(autostart::AGENT_ENTRY, command.as_deref()).map_err(|e| e.to_string())
 }
 
-pub async fn run() -> anyhow::Result<()> {
+pub async fn run(logon: bool) -> anyhow::Result<()> {
     let started_unix_ms = unix_ms();
     let mut notices = NoticeBoard::default();
 
-    let (config, config_path) = match config::load() {
+    let (mut config, config_path) = match config::load() {
         Ok(loaded) => {
             if let Some(warning) = loaded.warning {
                 tracing::warn!("{warning}");
@@ -198,6 +201,12 @@ pub async fn run() -> anyhow::Result<()> {
         }
     };
 
+    if logon {
+        config.share.clipboard = false;
+        config.share.drag_drop = false;
+        tracing::info!("agent berjalan di layar login Windows");
+    }
+
     if let Err(e) = tautra_input::cursor::restore() {
         tracing::warn!("kursor sistem gagal dipulihkan saat start: {e}");
     }
@@ -208,9 +217,11 @@ pub async fn run() -> anyhow::Result<()> {
         notices.push(NoticeLevel::Warning, app_error::LAYOUT_SAVE_FAILED, warning);
     }
 
-    if let Err(e) = sync_autostart(config.general.autostart) {
-        tracing::error!("auto-start gagal diatur: {e}");
-        notices.push(NoticeLevel::Error, app_error::AUTOSTART_FAILED, e);
+    if !logon {
+        if let Err(e) = sync_autostart(config.general.autostart) {
+            tracing::error!("auto-start gagal diatur: {e}");
+            notices.push(NoticeLevel::Error, app_error::AUTOSTART_FAILED, e);
+        }
     }
 
     let compat = crate::compat::report();
@@ -226,6 +237,7 @@ pub async fn run() -> anyhow::Result<()> {
         network: config.network.clone(),
         device_name: config.effective_device_name(),
         app_version: APP_VERSION.to_string(),
+        updates: !logon,
     })
     .await
     {
@@ -250,16 +262,21 @@ pub async fn run() -> anyhow::Result<()> {
         changed: Notify::new(),
         notify_tx: notify_tx.clone(),
         cancel: CancellationToken::new(),
+        logon,
+        logon_changed: Notify::new(),
     });
 
-    agent.share.start(&agent);
-    if let Ok(dir) = build::exe_dir() {
-        tokio::spawn(clean_old_until_done(dir));
+    if !logon {
+        agent.share.start(&agent);
+        if let Ok(dir) = build::exe_dir() {
+            tokio::spawn(clean_old_until_done(dir));
+        }
+        tokio::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            let _ = tokio::task::spawn_blocking(crate::service::check_update).await;
+        });
+        tokio::spawn(crate::logon_sync::run(agent.clone()));
     }
-    tokio::spawn(async {
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        let _ = tokio::task::spawn_blocking(crate::service::check_update).await;
-    });
 
     tokio::spawn(status_pump(agent.clone(), notify_tx.clone()));
     if let Some(events) = net_events {
@@ -275,18 +292,28 @@ pub async fn run() -> anyhow::Result<()> {
         }
     });
 
-    let served = tautra_ipc::pipe::serve(
-        PIPE_NAME,
-        Arc::new(Rpc::new(agent.clone())),
-        notify_tx,
-        agent.cancel.clone(),
-    )
-    .await;
+    let served = if logon {
+        agent.cancel.cancelled().await;
+        Ok(())
+    } else {
+        tautra_ipc::pipe::serve(
+            PIPE_NAME,
+            Arc::new(Rpc::new(agent.clone())),
+            notify_tx,
+            agent.cancel.clone(),
+        )
+        .await
+    };
 
     agent.cancel.cancel();
     agent.share.shutdown();
     if let Some(net) = &agent.net {
-        net.shutdown().await;
+        if tokio::time::timeout(std::time::Duration::from_secs(3), net.shutdown())
+            .await
+            .is_err()
+        {
+            tracing::warn!("jaringan tidak berhenti tepat waktu");
+        }
     }
     served.context("server IPC named pipe gagal")
 }
@@ -332,7 +359,9 @@ async fn event_pump(agent: Arc<Agent>, mut events: broadcast::Receiver<NetEvent>
                     tracing::info!(device = %device_id, name = %device_name, "sesi berakhir");
                 }
                 Ok(NetEvent::UpdateReady { device_name, build, dir, files }) => {
-                    crate::update::apply(&agent, &device_name, build, dir, files);
+                    if !agent.logon {
+                        crate::update::apply(&agent, &device_name, build, dir, files);
+                    }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     tracing::warn!("{n} event jaringan terlewat");

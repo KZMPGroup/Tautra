@@ -11,7 +11,10 @@ use windows::Win32::Security::{
     TOKEN_ALL_ACCESS,
 };
 use windows::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};
-use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
+use windows::Win32::System::RemoteDesktop::{
+    WTSFreeMemory, WTSGetActiveConsoleSessionId, WTSQuerySessionInformationW, WTSUserName,
+    WTS_CURRENT_SERVER_HANDLE,
+};
 use windows::Win32::System::Services::{
     RegisterServiceCtrlHandlerExW, SetServiceStatus, StartServiceCtrlDispatcherW,
     SERVICE_ACCEPT_SHUTDOWN, SERVICE_ACCEPT_STOP, SERVICE_CONTROL_INTERROGATE,
@@ -27,7 +30,7 @@ use windows::Win32::System::Threading::{
 
 use crate::protocol::{
     ControlReply, ControlRequest, ServiceState, WorkerReply, WorkerRequest, CONTROL_PIPE,
-    CONTROL_SDDL, SERVICE_DISPLAY_NAME, WORKER_ARG,
+    CONTROL_SDDL, LOGON_ARG, SERVICE_DISPLAY_NAME, WORKER_ARG,
 };
 use crate::{wide, ServiceError};
 use tautra_common::build;
@@ -35,6 +38,7 @@ use tautra_common::build;
 const WORKER_PIPE: &str = r"\\.\pipe\tautra-service-worker";
 const AGENT_EXE: &str = "tautra-agent.exe";
 const PING_INTERVAL: Duration = Duration::from_secs(2);
+const LOGON_BACKOFF: Duration = Duration::from_secs(5);
 
 static STOP: AtomicBool = AtomicBool::new(false);
 static STATUS_HANDLE: AtomicUsize = AtomicUsize::new(0);
@@ -74,6 +78,26 @@ impl Drop for Child {
 fn active_session() -> Option<u32> {
     let id = unsafe { WTSGetActiveConsoleSessionId() };
     (id != 0xFFFF_FFFF).then_some(id)
+}
+
+fn user_signed_in(session: u32) -> bool {
+    let mut buffer = PWSTR::null();
+    let mut bytes = 0u32;
+    let queried = unsafe {
+        WTSQuerySessionInformationW(
+            Some(WTS_CURRENT_SERVER_HANDLE),
+            session,
+            WTSUserName,
+            &mut buffer,
+            &mut bytes,
+        )
+    };
+    if queried.is_err() || buffer.is_null() {
+        return true;
+    }
+    let name = unsafe { buffer.to_string() }.unwrap_or_default();
+    unsafe { WTSFreeMemory(buffer.0 as *mut c_void) };
+    !name.trim().is_empty()
 }
 
 fn service_token(session: u32) -> Option<Token> {
@@ -189,6 +213,14 @@ fn control_handler(state: &Mutex<ServiceState>, request: &[u8]) -> Vec<u8> {
             Ok(restarting) => ControlReply::Updating(restarting),
             Err(e) => ControlReply::Error(e),
         },
+        Ok(ControlRequest::SyncLogon(payload)) => match crate::logon::store(&payload) {
+            Ok(()) => ControlReply::Ok,
+            Err(e) => ControlReply::Error(e),
+        },
+        Ok(ControlRequest::ClearLogon) => match crate::logon::clear() {
+            Ok(()) => ControlReply::Ok,
+            Err(e) => ControlReply::Error(e),
+        },
         Err(e) => ControlReply::Error(format!("permintaan tidak dimengerti: {e}")),
     };
     serde_json::to_vec(&reply).unwrap_or_default()
@@ -247,6 +279,10 @@ fn supervise(state: Arc<Mutex<ServiceState>>) {
     let mut worker_desktop: Option<String> = None;
     let mut last_ping = Instant::now() - PING_INTERVAL;
     let worker_command = format!("\"{}\" {} \"{}\"", agent_exe().display(), WORKER_ARG, WORKER_PIPE);
+    let logon_command = format!("\"{}\" {}", agent_exe().display(), LOGON_ARG);
+    let mut logon: Option<Child> = None;
+    let mut logon_session: Option<u32> = None;
+    let mut logon_started = Instant::now() - LOGON_BACKOFF;
 
     while !STOP.load(Ordering::SeqCst) {
         match active_session() {
@@ -282,6 +318,32 @@ fn supervise(state: Arc<Mutex<ServiceState>>) {
             }
         }
 
+        let wanted = active_session().filter(|s| !user_signed_in(*s) && crate::logon::ready());
+        match wanted {
+            Some(session) => {
+                let alive = logon.as_ref().is_some_and(|c| c.alive());
+                if (!alive || logon_session != Some(session)) && logon_started.elapsed() >= LOGON_BACKOFF {
+                    if let Some(old) = logon.take() {
+                        old.terminate();
+                    }
+                    logon_started = Instant::now();
+                    logon = service_token(session)
+                        .and_then(|token| spawn(&token, &logon_command, Some("Winlogon")));
+                    logon_session = logon.as_ref().map(|_| session);
+                    if logon.is_some() {
+                        tracing::info!(session, "agent layar login dijalankan");
+                    }
+                }
+            }
+            None => {
+                if let Some(old) = logon.take() {
+                    old.terminate();
+                    tracing::info!("agent layar login dihentikan");
+                }
+                logon_session = None;
+            }
+        }
+
         if let Ok(mut guard) = state.lock() {
             guard.worker_desktop = worker_desktop.clone();
             guard.secure_desktop = worker_desktop
@@ -299,6 +361,9 @@ fn supervise(state: Arc<Mutex<ServiceState>>) {
     }
 
     if let Some(old) = worker.take() {
+        old.terminate();
+    }
+    if let Some(old) = logon.take() {
         old.terminate();
     }
 }
@@ -350,7 +415,14 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut PWSTR) {
     report(handle, SERVICE_RUNNING, SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN);
     tracing::info!("{SERVICE_DISPLAY_NAME} berjalan");
     std::thread::spawn(|| {
+        crate::install::harden_self();
         crate::install::refresh_firewall_rule();
+        std::thread::sleep(Duration::from_secs(2));
+        match self_update() {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(e) => tracing::debug!("pembaruan layanan saat mulai dilewati: {e}"),
+        }
         let dir = crate::install::service_dir();
         for _ in 0..90 {
             if build::clean_old(&dir) {

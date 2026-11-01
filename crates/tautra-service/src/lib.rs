@@ -2,14 +2,15 @@
 
 pub mod client;
 pub mod install;
+pub mod logon;
 pub mod pipe;
 pub mod protocol;
 pub mod service;
 pub mod worker;
 
 pub use protocol::{
-    ControlReply, ControlRequest, ServiceInput, ServiceState, INSTALL_ARG, RESTART_ARG,
-    SERVICE_ARG, UNINSTALL_ARG, WORKER_ARG,
+    ControlReply, ControlRequest, LogonFile, LogonPayload, ServiceInput, ServiceState,
+    INSTALL_ARG, LOGON_ARG, RESTART_ARG, SERVICE_ARG, UNINSTALL_ARG, WORKER_ARG,
 };
 
 #[derive(Debug, thiserror::Error)]

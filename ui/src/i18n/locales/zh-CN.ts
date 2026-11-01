@@ -258,6 +258,7 @@ const strings: Strings = {
     languageEmpty: "没有与“{query}”匹配的语言。",
     autostart: "登录 Windows 时启动",
     autostartHint: "登录后自动启动 agent 和托盘图标。",
+    autostartLogonHint: "如果在“输入”页面安装了 Tautra 服务，这台电脑开机后在 Windows 登录界面也能被控制。",
     connectionSection: "连接",
     autoConnect: "自动连接",
     autoConnectHint: "受信任的设备一出现在网络上就连接。",

@@ -259,6 +259,7 @@ const strings: Strings = {
     languageEmpty: "Walang wikang tumutugma sa \"{query}\".",
     autostart: "Magsimula kapag nag-sign in sa Windows",
     autostartHint: "Kusang nagsisimula ang agent at ang tray icon pagkatapos mag-sign in.",
+    autostartLogonHint: "Kung naka-install ang serbisyo ng Tautra sa pahinang Input, makokontrol din ang PC na ito mula sa sign-in screen ng Windows pagkabukas pa lang.",
     connectionSection: "Koneksyon",
     autoConnect: "Awtomatikong pagkonekta",
     autoConnectHint: "Kumonekta sa mga pinagkakatiwalaang device sa sandaling lumabas sila sa network.",

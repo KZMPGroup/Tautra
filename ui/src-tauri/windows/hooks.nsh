@@ -17,6 +17,13 @@
   RMDir /r "$INSTDIR\update"
 !macroend
 
+!macro NSIS_HOOK_POSTINSTALL
+  IfSilent tautra_install_done
+  IfFileExists "$INSTDIR\tautra-agent.exe" 0 tautra_install_done
+  ExecShellWait "runas" "$INSTDIR\tautra-agent.exe" "--service-install" SW_HIDE
+  tautra_install_done:
+!macroend
+
 !macro NSIS_HOOK_PREUNINSTALL
   !insertmacro TautraStopProcesses
   IfSilent tautra_service_done

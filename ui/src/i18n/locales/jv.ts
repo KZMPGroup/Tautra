@@ -259,6 +259,7 @@ const strings: Strings = {
     languageEmpty: "Ora ana basa sing cocog karo \"{query}\".",
     autostart: "Wiwiti nalika mlebu Windows",
     autostartHint: "Agent lan ikon tray urip dhewe sawise mlebu.",
+    autostartLogonHint: "Yen layanan Tautra dipasang ing kaca Input, PC iki uga bisa dikontrol saka layar mlebu Windows wiwit lagi diuripake.",
     connectionSection: "Sambungan",
     autoConnect: "Nyambung otomatis",
     autoConnectHint: "Nyambung menyang piranti sing dipercaya sanalika katon ing jaringan.",

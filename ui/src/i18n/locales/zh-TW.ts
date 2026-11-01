@@ -258,6 +258,7 @@ const strings: Strings = {
     languageEmpty: "沒有符合「{query}」的語言。",
     autostart: "登入 Windows 時啟動",
     autostartHint: "登入後自動啟動 agent 和系統匣圖示。",
+    autostartLogonHint: "如果在「輸入」頁面安裝了 Tautra 服務，這台電腦開機後在 Windows 登入畫面也能被控制。",
     connectionSection: "連線",
     autoConnect: "自動連線",
     autoConnectHint: "受信任的裝置一出現在網路上就連線。",

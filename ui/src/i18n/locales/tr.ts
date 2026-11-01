@@ -261,6 +261,7 @@ const strings: Strings = {
     languageEmpty: "\"{query}\" ile eşleşen dil yok.",
     autostart: "Windows'ta oturum açınca başlat",
     autostartHint: "Aracı ve sistem tepsisi simgesi oturum açtıktan sonra otomatik başlar.",
+    autostartLogonHint: "Tautra hizmeti Giriş sayfasından kurulduysa bu bilgisayar, açılır açılmaz Windows oturum açma ekranından da kontrol edilebilir.",
     connectionSection: "Bağlantı",
     autoConnect: "Otomatik bağlan",
     autoConnectHint: "Güvenilen cihazlar ağda görünür görünmez onlara bağlan.",

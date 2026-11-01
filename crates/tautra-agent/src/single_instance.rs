@@ -5,9 +5,14 @@ use windows::Win32::System::Threading::CreateMutexW;
 pub struct InstanceGuard(HANDLE);
 
 impl InstanceGuard {
-    pub fn acquire() -> windows::core::Result<Option<Self>> {
+    pub fn acquire(logon: bool) -> windows::core::Result<Option<Self>> {
+        let name = if logon {
+            w!("Local\\Tautra.LogonAgent")
+        } else {
+            w!("Local\\Tautra.Agent")
+        };
         unsafe {
-            let handle = CreateMutexW(None, false, w!("Local\\Tautra.Agent"))?;
+            let handle = CreateMutexW(None, false, name)?;
             if GetLastError() == ERROR_ALREADY_EXISTS {
                 let _ = CloseHandle(handle);
                 return Ok(None);

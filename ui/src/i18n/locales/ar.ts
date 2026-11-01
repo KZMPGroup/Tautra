@@ -259,6 +259,7 @@ const strings: Strings = {
     languageEmpty: "لا توجد لغة تطابق «{query}».",
     autostart: "التشغيل عند تسجيل الدخول إلى Windows",
     autostartHint: "يبدأ الوكيل وأيقونة علبة النظام تلقائيًا بعد تسجيل الدخول.",
+    autostartLogonHint: "إذا كانت خدمة Tautra مثبتة من صفحة الإدخال، فيمكن التحكم في هذا الكمبيوتر أيضًا من شاشة تسجيل الدخول إلى Windows فور تشغيله.",
     connectionSection: "الاتصال",
     autoConnect: "الاتصال التلقائي",
     autoConnectHint: "الاتصال بالأجهزة الموثوقة فور ظهورها على الشبكة.",

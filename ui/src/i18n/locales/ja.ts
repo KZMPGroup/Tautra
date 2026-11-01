@@ -262,6 +262,7 @@ const strings: Strings = {
     languageEmpty: "「{query}」に一致する言語はありません。",
     autostart: "Windows へのサインイン時に起動",
     autostartHint: "サインイン後、エージェントとトレイ アイコンが自動で起動します。",
+    autostartLogonHint: "［入力］ページで Tautra サービスをインストールしておくと、起動直後の Windows サインイン画面でもこの PC を操作できます。",
     connectionSection: "接続",
     autoConnect: "自動接続",
     autoConnectHint: "信頼済みのデバイスがネットワークに現れたらすぐに接続します。",

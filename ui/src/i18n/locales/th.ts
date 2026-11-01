@@ -259,6 +259,7 @@ const strings: Strings = {
     languageEmpty: "ไม่มีภาษาที่ตรงกับ \"{query}\"",
     autostart: "เริ่มเมื่อลงชื่อเข้าใช้ Windows",
     autostartHint: "เอเจนต์และไอคอนถาดระบบจะเริ่มเองหลังลงชื่อเข้าใช้",
+    autostartLogonHint: "หากติดตั้งบริการ Tautra จากหน้าอินพุตไว้ จะควบคุมพีซีเครื่องนี้จากหน้าจอลงชื่อเข้าใช้ Windows ได้ตั้งแต่เปิดเครื่อง",
     connectionSection: "การเชื่อมต่อ",
     autoConnect: "เชื่อมต่ออัตโนมัติ",
     autoConnectHint: "เชื่อมต่อกับอุปกรณ์ที่เชื่อถือทันทีที่ปรากฏบนเครือข่าย",

@@ -152,11 +152,27 @@ pub fn quit_app(app: AppHandle) {
 pub fn quit(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let link = app.state::<AgentLink>().inner().clone();
+        link.begin_quit();
+        let pid = tokio::time::timeout(
+            Duration::from_secs(2),
+            link.call(method::DIAGNOSTICS_GET, Value::Null),
+        )
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .and_then(|value| value.get("agent_pid").and_then(Value::as_u64))
+        .and_then(|pid| u32::try_from(pid).ok());
         let _ = tokio::time::timeout(
             Duration::from_secs(2),
             link.call(method::AGENT_SHUTDOWN, Value::Null),
         )
         .await;
+        if let Some(pid) = pid {
+            let _ = tokio::task::spawn_blocking(move || {
+                tautra_common::build::stop_pid(pid, Duration::from_secs(4))
+            })
+            .await;
+        }
         app.exit(0);
     });
 }

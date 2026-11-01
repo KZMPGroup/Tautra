@@ -1,6 +1,6 @@
 use tautra_proto::kvm::ServiceInput;
 
-use crate::protocol::{ControlReply, ControlRequest, ServiceState, CONTROL_PIPE};
+use crate::protocol::{ControlReply, ControlRequest, LogonPayload, ServiceState, CONTROL_PIPE};
 use crate::ServiceError;
 
 fn call(request: &ControlRequest) -> Result<ControlReply, ServiceError> {
@@ -47,4 +47,20 @@ pub fn status() -> Result<ServiceState, ServiceError> {
 
 pub fn running() -> bool {
     !matches!(status(), Err(ServiceError::NotRunning))
+}
+
+fn expect_ok(request: &ControlRequest) -> Result<(), ServiceError> {
+    match call(request)? {
+        ControlReply::Ok => Ok(()),
+        ControlReply::Error(e) => Err(ServiceError::Other(e)),
+        ControlReply::Status(_) | ControlReply::Updating(_) => Ok(()),
+    }
+}
+
+pub fn sync_logon(payload: LogonPayload) -> Result<(), ServiceError> {
+    expect_ok(&ControlRequest::SyncLogon(payload))
+}
+
+pub fn clear_logon() -> Result<(), ServiceError> {
+    expect_ok(&ControlRequest::ClearLogon)
 }

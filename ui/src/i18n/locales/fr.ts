@@ -272,6 +272,7 @@ const strings: Strings = {
     languageEmpty: "Aucune langue ne correspond à « {query} ».",
     autostart: "Démarrer à l'ouverture de session Windows",
     autostartHint: "L'agent et l'icône de la zone de notification démarrent automatiquement après la connexion.",
+    autostartLogonHint: "Si le service Tautra est installé depuis la page Entrée, ce PC peut aussi être contrôlé depuis l’écran de connexion de Windows dès son démarrage.",
     connectionSection: "Connexion",
     autoConnect: "Connexion automatique",
     autoConnectHint: "Se connecter aux appareils de confiance dès qu'ils apparaissent sur le réseau.",

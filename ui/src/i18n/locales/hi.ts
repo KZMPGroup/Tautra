@@ -259,6 +259,7 @@ const strings: Strings = {
     languageEmpty: "\"{query}\" से मेल खाती कोई भाषा नहीं।",
     autostart: "Windows में साइन इन करने पर शुरू करें",
     autostartHint: "साइन इन के बाद एजेंट और ट्रे आइकन अपने-आप शुरू होते हैं।",
+    autostartLogonHint: "यदि इनपुट पेज पर Tautra सेवा इंस्टॉल है, तो यह पीसी चालू होते ही Windows साइन-इन स्क्रीन से भी नियंत्रित किया जा सकता है।",
     connectionSection: "कनेक्शन",
     autoConnect: "ऑटो कनेक्ट",
     autoConnectHint: "भरोसेमंद डिवाइस नेटवर्क पर दिखते ही उनसे कनेक्ट करें।",

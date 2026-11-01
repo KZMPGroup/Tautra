@@ -7,6 +7,8 @@ mod compat;
 #[cfg(windows)]
 mod kvm;
 #[cfg(windows)]
+mod logon_sync;
+#[cfg(windows)]
 mod metrics;
 #[cfg(windows)]
 mod notices;
@@ -38,7 +40,20 @@ fn main() -> ExitCode {
 fn main() -> ExitCode {
     tautra_common::build::set(tautra_common::build::release_id(tautra_build_id()));
     let console = cfg!(debug_assertions) || std::env::args().any(|a| a == "--console");
-    let _log = match tautra_common::logging::init("agent", console) {
+    let logon = std::env::args().any(|a| a == tautra_service::LOGON_ARG);
+    let in_service = std::env::args()
+        .any(|a| a == tautra_service::SERVICE_ARG || a == tautra_service::WORKER_ARG);
+    if logon {
+        tautra_common::paths::use_root(tautra_common::paths::logon_dir());
+    }
+    let logging = if in_service {
+        tautra_common::logging::init_at("service", tautra_service::install::log_dir(), console)
+    } else if logon {
+        tautra_common::logging::init("logon", console)
+    } else {
+        tautra_common::logging::init("agent", console)
+    };
+    let _log = match logging {
         Ok(guard) => guard,
         Err(e) => {
             eprintln!("Tautra: logging gagal dipasang: {e}");
@@ -56,7 +71,7 @@ fn main() -> ExitCode {
 
     update::wait_for_previous();
 
-    let _instance = match single_instance::InstanceGuard::acquire() {
+    let _instance = match single_instance::InstanceGuard::acquire(logon) {
         Ok(Some(guard)) => guard,
         Ok(None) => {
             tracing::info!("agent lain sudah berjalan di sesi ini; keluar");
@@ -69,7 +84,9 @@ fn main() -> ExitCode {
     };
 
     raise_priority();
-    sync_installed_version();
+    if !logon {
+        sync_installed_version();
+    }
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -85,16 +102,20 @@ fn main() -> ExitCode {
         }
     };
 
-    match runtime.block_on(app::run()) {
+    let code = match runtime.block_on(app::run(logon)) {
         Ok(()) => {
             tracing::info!("agent berhenti dengan normal");
-            ExitCode::SUCCESS
+            0
         }
         Err(e) => {
             tracing::error!("agent berhenti karena error: {e:#}");
-            ExitCode::FAILURE
+            1
         }
-    }
+    };
+    runtime.shutdown_timeout(std::time::Duration::from_secs(2));
+    drop(_instance);
+    drop(_log);
+    std::process::exit(code);
 }
 
 #[cfg(windows)]

@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{
-    CloseHandle, LocalFree, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE,
+    CloseHandle, LocalFree, ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE,
     HLOCAL,
 };
 use windows::Win32::Security::Authorization::{
@@ -72,6 +72,9 @@ fn read_message(pipe: HANDLE) -> Result<Vec<u8>, ServiceError> {
                 if read == 0 {
                     return Ok(out);
                 }
+            }
+            Err(e) if e.code() == ERROR_MORE_DATA.to_hresult() => {
+                out.extend_from_slice(&chunk[..read as usize]);
             }
             Err(e) => return Err(ServiceError::Pipe(format!("baca pipe: {}", e.message()))),
         }

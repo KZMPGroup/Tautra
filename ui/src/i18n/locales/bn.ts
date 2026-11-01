@@ -259,6 +259,7 @@ const strings: Strings = {
     languageEmpty: "\"{query}\"-এর সাথে মেলে এমন কোনো ভাষা নেই।",
     autostart: "Windows-এ সাইন ইন করলে চালু করুন",
     autostartHint: "সাইন ইনের পর এজেন্ট ও ট্রে আইকন স্বয়ংক্রিয়ভাবে চালু হয়।",
+    autostartLogonHint: "ইনপুট পেজ থেকে Tautra সার্ভিস ইনস্টল থাকলে, এই পিসি চালু হওয়ার পরপরই Windows সাইন-ইন স্ক্রিন থেকেও নিয়ন্ত্রণ করা যায়।",
     connectionSection: "সংযোগ",
     autoConnect: "স্বয়ংক্রিয় সংযোগ",
     autoConnectHint: "বিশ্বস্ত ডিভাইস নেটওয়ার্কে দেখা দেওয়া মাত্রই সংযোগ করুন।",

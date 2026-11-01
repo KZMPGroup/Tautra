@@ -265,6 +265,7 @@ const id: Strings = {
     languageEmpty: "Tidak ada bahasa yang cocok dengan \"{query}\".",
     autostart: "Jalankan saat login Windows",
     autostartHint: "Agent dan ikon tray menyala otomatis setelah login.",
+    autostartLogonHint: "Jika layanan Tautra dipasang di halaman Input, PC ini juga bisa dikontrol dari layar masuk Windows sejak baru dinyalakan.",
     connectionSection: "Koneksi",
     autoConnect: "Sambung otomatis",
     autoConnectHint: "Sambungkan ke perangkat trusted begitu terlihat di jaringan.",

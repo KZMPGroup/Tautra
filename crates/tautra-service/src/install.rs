@@ -9,13 +9,22 @@ use windows::Win32::Foundation::{
     CloseHandle, ERROR_SERVICE_ALREADY_RUNNING, ERROR_SERVICE_DOES_NOT_EXIST,
     ERROR_SERVICE_MARKED_FOR_DELETE, ERROR_SERVICE_NOT_ACTIVE, WAIT_OBJECT_0,
 };
+use windows::Win32::Security::Authorization::{
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+};
+use windows::Win32::Security::{DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR};
 use windows::Win32::System::Services::{
     ChangeServiceConfig2W, CloseServiceHandle, ControlService, CreateServiceW, DeleteService,
-    OpenSCManagerW, OpenServiceW, QueryServiceStatus, StartServiceW, SC_HANDLE,
-    SC_MANAGER_ALL_ACCESS, SC_MANAGER_CONNECT, SERVICE_ALL_ACCESS, SERVICE_QUERY_STATUS, SERVICE_AUTO_START, SERVICE_CONFIG_DESCRIPTION,
-    SERVICE_CONTROL_STOP, SERVICE_DESCRIPTIONW, SERVICE_ERROR_NORMAL, SERVICE_RUNNING,
+    OpenSCManagerW, OpenServiceW, QueryServiceStatus, SetServiceObjectSecurity, StartServiceW,
+    SC_ACTION, SC_ACTION_RESTART, SC_HANDLE, SC_MANAGER_ALL_ACCESS, SC_MANAGER_CONNECT,
+    SERVICE_ALL_ACCESS, SERVICE_AUTO_START, SERVICE_CHANGE_CONFIG, SERVICE_CONFIG_DESCRIPTION,
+    SERVICE_CONFIG_FAILURE_ACTIONS, SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, SERVICE_CONTROL_STOP,
+    SERVICE_DESCRIPTIONW, SERVICE_ERROR_NORMAL, SERVICE_FAILURE_ACTIONSW,
+    SERVICE_FAILURE_ACTIONS_FLAG, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START,
     SERVICE_STATUS, SERVICE_STATUS_CURRENT_STATE, SERVICE_STOPPED, SERVICE_WIN32_OWN_PROCESS,
 };
+use windows::Win32::Foundation::{LocalFree, HLOCAL};
+use windows::Win32::Storage::FileSystem::WRITE_DAC;
 use windows::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject};
 use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
 use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
@@ -30,7 +39,9 @@ const ERROR_CANCELLED: i32 = 1223;
 const SERVICE_EXE: &str = "tautra-agent.exe";
 const SAS_KEY: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System";
 const FIREWALL_RULE: &str = "Tautra Agent";
+const LOGON_FIREWALL_RULE: &str = "Tautra Login";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const SERVICE_SDDL: &str = "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPLOCRRC;;;AU)";
 
 pub fn service_dir() -> PathBuf {
     let base = std::env::var_os("ProgramData")
@@ -216,6 +227,11 @@ fn create_service(manager: &ScHandle, exe: &Path) -> Result<ScHandle, ServiceErr
     }
     .map_err(|e| ServiceError::Scm(format!("layanan gagal didaftarkan: {}", e.message())))?;
     let service = ScHandle(handle);
+    harden(&service);
+    Ok(service)
+}
+
+fn harden(service: &ScHandle) {
     let mut description = wide(SERVICE_DESCRIPTION);
     let info = SERVICE_DESCRIPTIONW {
         lpDescription: PWSTR(description.as_mut_ptr()),
@@ -227,7 +243,85 @@ fn create_service(manager: &ScHandle, exe: &Path) -> Result<ScHandle, ServiceErr
             Some(&info as *const _ as *const c_void),
         )
     };
-    Ok(service)
+    let mut actions = [
+        SC_ACTION { Type: SC_ACTION_RESTART, Delay: 1_000 },
+        SC_ACTION { Type: SC_ACTION_RESTART, Delay: 5_000 },
+        SC_ACTION { Type: SC_ACTION_RESTART, Delay: 30_000 },
+    ];
+    let failure = SERVICE_FAILURE_ACTIONSW {
+        dwResetPeriod: 86_400,
+        lpRebootMsg: PWSTR::null(),
+        lpCommand: PWSTR::null(),
+        cActions: actions.len() as u32,
+        lpsaActions: actions.as_mut_ptr(),
+    };
+    if let Err(e) = unsafe {
+        ChangeServiceConfig2W(
+            service.0,
+            SERVICE_CONFIG_FAILURE_ACTIONS,
+            Some(&failure as *const _ as *const c_void),
+        )
+    } {
+        tracing::warn!("pemulihan otomatis layanan gagal diatur: {}", e.message());
+    }
+    let flag = SERVICE_FAILURE_ACTIONS_FLAG {
+        fFailureActionsOnNonCrashFailures: windows::core::BOOL(1),
+    };
+    let _ = unsafe {
+        ChangeServiceConfig2W(
+            service.0,
+            SERVICE_CONFIG_FAILURE_ACTIONS_FLAG,
+            Some(&flag as *const _ as *const c_void),
+        )
+    };
+    let sddl = wide(SERVICE_SDDL);
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    if unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            PCWSTR(sddl.as_ptr()),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            None,
+        )
+    }
+    .is_ok()
+    {
+        if let Err(e) = unsafe { SetServiceObjectSecurity(service.0, DACL_SECURITY_INFORMATION, descriptor) } {
+            tracing::warn!("hak akses layanan gagal diatur: {}", e.message());
+        }
+        let _ = unsafe { LocalFree(Some(HLOCAL(descriptor.0))) };
+    }
+}
+
+pub fn harden_self() {
+    let Ok(manager) = open_manager_with(SC_MANAGER_CONNECT) else {
+        return;
+    };
+    if let Ok(Some(service)) = open_service_with(&manager, SERVICE_CHANGE_CONFIG | WRITE_DAC.0) {
+        harden(&service);
+    }
+}
+
+pub fn ensure_running() -> bool {
+    let Ok(manager) = open_manager_with(SC_MANAGER_CONNECT) else {
+        return false;
+    };
+    let Ok(Some(service)) = open_service_with(&manager, SERVICE_START | SERVICE_QUERY_STATUS) else {
+        return false;
+    };
+    if service_state(&service) == Some(SERVICE_RUNNING) {
+        return true;
+    }
+    match start_service(&service) {
+        Ok(()) => {
+            tracing::info!("layanan Tautra dijalankan kembali");
+            true
+        }
+        Err(e) => {
+            tracing::debug!("layanan Tautra belum bisa dijalankan: {e}");
+            false
+        }
+    }
 }
 
 fn start_service(service: &ScHandle) -> Result<(), ServiceError> {
@@ -251,13 +345,34 @@ fn netsh(args: &[&str]) {
         .status();
 }
 
-fn remove_firewall_rule() {
+fn delete_rule(name: &str) {
     netsh(&[
         "advfirewall",
         "firewall",
         "delete",
         "rule",
-        &format!("name={FIREWALL_RULE}"),
+        &format!("name={name}"),
+    ]);
+}
+
+fn remove_firewall_rule() {
+    delete_rule(FIREWALL_RULE);
+    delete_rule(LOGON_FIREWALL_RULE);
+}
+
+fn add_rule(name: &str, exe: &Path) {
+    delete_rule(name);
+    netsh(&[
+        "advfirewall",
+        "firewall",
+        "add",
+        "rule",
+        &format!("name={name}"),
+        "dir=in",
+        "action=allow",
+        &format!("program={}", exe.display()),
+        "enable=yes",
+        "profile=any",
     ]);
 }
 
@@ -275,19 +390,8 @@ pub fn refresh_firewall_rule() {
 }
 
 fn firewall_rule_for(exe: &Path) {
-    remove_firewall_rule();
-    netsh(&[
-        "advfirewall",
-        "firewall",
-        "add",
-        "rule",
-        &format!("name={FIREWALL_RULE}"),
-        "dir=in",
-        "action=allow",
-        &format!("program={}", exe.display()),
-        "enable=yes",
-        "profile=any",
-    ]);
+    add_rule(FIREWALL_RULE, exe);
+    add_rule(LOGON_FIREWALL_RULE, &service_exe_path());
 }
 
 pub fn install() -> Result<(), ServiceError> {
@@ -299,7 +403,10 @@ pub fn install() -> Result<(), ServiceError> {
     copy_exe(&dest)?;
     remember_source();
     let service = match open_service(&manager)? {
-        Some(service) => service,
+        Some(service) => {
+            harden(&service);
+            service
+        }
         None => create_service(&manager, &dest)?,
     };
     enable_software_sas();
@@ -320,6 +427,7 @@ pub fn uninstall() -> Result<(), ServiceError> {
     remove_firewall_rule();
     let Some(service) = open_service(&manager)? else {
         let _ = std::fs::remove_dir_all(service_dir());
+        let _ = crate::logon::clear();
         return Ok(());
     };
     stop_service(&service)?;
@@ -330,6 +438,7 @@ pub fn uninstall() -> Result<(), ServiceError> {
     }
     drop(service);
     let _ = std::fs::remove_dir_all(service_dir());
+    let _ = crate::logon::clear();
     Ok(())
 }
 

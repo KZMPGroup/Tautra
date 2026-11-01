@@ -262,6 +262,7 @@ const en = {
     languageEmpty: "No language matches \"{query}\".",
     autostart: "Start when signing in to Windows",
     autostartHint: "The agent and tray icon start automatically after sign-in.",
+    autostartLogonHint: "If the Tautra service is installed on the Input page, this PC can also be controlled from the Windows sign-in screen right after it starts.",
     connectionSection: "Connection",
     autoConnect: "Auto connect",
     autoConnectHint: "Connect to trusted devices as soon as they appear on the network.",

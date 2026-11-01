@@ -31,7 +31,7 @@ All traffic runs peer to peer, directly between the two devices, over QUIC with 
 - Keyboard, mouse buttons, horizontal and vertical scroll, side buttons and media keys.
 - Hotkeys to jump between devices and to lock the cursor. Each hotkey can be reset to its default.
 - Gaming Mode: locks the cursor to the local device and turns on automatically when a full-screen app is running.
-- An optional Windows service lets the cursor control UAC prompts, the lock screen and elevated windows.
+- An optional Windows service lets the cursor control UAC prompts, the lock screen and elevated windows. With the service installed and "Start when signing in to Windows" on, the PC can also be controlled from the Windows sign-in screen right after it boots.
 
 **Clipboard and files**
 - Clipboard sync for text, HTML, RTF, images and files.

@@ -25,7 +25,7 @@ Semua lalu lintas berjalan langsung antar perangkat (peer to peer) lewat QUIC da
 - Mendukung keyboard, semua tombol mouse, scroll vertikal dan horizontal, tombol samping, dan tombol media.
 - Hotkey untuk pindah perangkat dan mengunci kursor. Setiap hotkey bisa dikembalikan ke bawaan.
 - Gaming Mode: mengunci kursor di perangkat ini. Mode ini menyala otomatis saat ada aplikasi fullscreen.
-- Layanan Windows (opsional) supaya kursor bisa mengendalikan UAC, layar kunci, dan jendela administrator.
+- Layanan Windows (opsional) supaya kursor bisa mengendalikan UAC, layar kunci, dan jendela administrator. Jika layanan terpasang dan "Mulai saat masuk Windows" menyala, PC juga bisa dikontrol dari layar masuk Windows sejak baru dinyalakan.
 
 **Clipboard dan file**
 - Sinkronisasi clipboard untuk teks, HTML, RTF, gambar, dan file.

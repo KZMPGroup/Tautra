@@ -270,6 +270,7 @@ const strings: Strings = {
     languageEmpty: "Nenhum idioma corresponde a \"{query}\".",
     autostart: "Iniciar ao entrar no Windows",
     autostartHint: "O agente e o ícone da bandeja iniciam automaticamente após o login.",
+    autostartLogonHint: "Se o serviço do Tautra estiver instalado na página Entrada, este PC também pode ser controlado na tela de entrada do Windows logo após ligar.",
     connectionSection: "Conexão",
     autoConnect: "Conexão automática",
     autoConnectHint: "Conectar-se a dispositivos confiáveis assim que aparecerem na rede.",

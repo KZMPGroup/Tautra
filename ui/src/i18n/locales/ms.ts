@@ -259,6 +259,7 @@ const strings: Strings = {
     languageEmpty: "Tiada bahasa yang sepadan dengan \"{query}\".",
     autostart: "Mula apabila log masuk ke Windows",
     autostartHint: "Ejen dan ikon dulang bermula secara automatik selepas log masuk.",
+    autostartLogonHint: "Jika perkhidmatan Tautra dipasang di halaman Input, PC ini juga boleh dikawal dari skrin log masuk Windows sebaik sahaja dihidupkan.",
     connectionSection: "Sambungan",
     autoConnect: "Sambung automatik",
     autoConnectHint: "Sambung ke peranti dipercayai sebaik sahaja ia muncul pada rangkaian.",
