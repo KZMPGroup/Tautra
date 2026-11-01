@@ -69,6 +69,7 @@ fn main() -> ExitCode {
     };
 
     raise_priority();
+    sync_installed_version();
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -108,4 +109,18 @@ fn raise_priority() {
 fn raise_thread_priority() {
     use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST};
     let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) };
+}
+
+fn sync_installed_version() {
+    let Ok(dir) = tautra_common::build::exe_dir() else {
+        return;
+    };
+    if !tautra_common::installed::is_installed(&dir) {
+        return;
+    }
+    match tautra_common::installed::sync_version(&dir, tautra_common::APP_VERSION) {
+        Ok(true) => tracing::info!(version = tautra_common::APP_VERSION, "versi di daftar aplikasi Windows diperbarui"),
+        Ok(false) => {}
+        Err(e) => tracing::warn!("versi di daftar aplikasi Windows gagal diperbarui: {e}"),
+    }
 }

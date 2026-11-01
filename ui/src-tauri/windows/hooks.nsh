@@ -13,7 +13,8 @@
 
 !macro NSIS_HOOK_PREINSTALL
   !insertmacro TautraStopProcesses
-  Delete "$INSTDIR\*.old"
+  Delete "$INSTDIR\*.old*"
+  RMDir /r "$INSTDIR\update"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
@@ -29,7 +30,8 @@
 !macro NSIS_HOOK_POSTUNINSTALL
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Tautra"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "TautraAgent"
-  Delete "$INSTDIR\*.old"
+  Delete "$INSTDIR\*.old*"
   Delete "$INSTDIR\tautra-agent.exe"
+  RMDir /r "$INSTDIR\update"
   RMDir "$INSTDIR"
 !macroend

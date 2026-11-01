@@ -3,7 +3,8 @@ use std::sync::OnceLock;
 
 pub const AGENT_EXE: &str = "tautra-agent.exe";
 pub const UI_EXE: &str = "tautra-ui.exe";
-pub const UPDATE_FILES: [&str; 2] = [AGENT_EXE, UI_EXE];
+pub const UNINSTALL_EXE: &str = "uninstall.exe";
+pub const UPDATE_FILES: [&str; 3] = [AGENT_EXE, UI_EXE, UNINSTALL_EXE];
 pub const OLD_SUFFIX: &str = ".old";
 
 static BUILD: OnceLock<u64> = OnceLock::new();

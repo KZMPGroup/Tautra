@@ -248,6 +248,9 @@ pub async fn fetch(
             }
             let dest = dir.join(&entry.name);
             let current = exe_dir.join(&entry.name);
+            if entry.name == build::UNINSTALL_EXE && !current.is_file() {
+                continue;
+            }
             let same = tokio::task::spawn_blocking({
                 let current = current.clone();
                 let hash = entry.hash;
