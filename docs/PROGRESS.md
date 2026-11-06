@@ -291,3 +291,5 @@ Dihapus: fitur layar tambahan tidak ada lagi sejak 2026-10-28. Setelah build bar
 ## 2026-11-01 — Prioritas jaringan dan proses
 - Soket UDP QUIC dibuat sendiri (`open_endpoint`) supaya bisa didaftarkan ke QoS Windows (qWAVE): alamat sesi aktif dipasang ke flow `QOSTrafficTypeVoice` (DSCP 56, WMM voice di Wi-Fi), dilepas saat sesi pindah/putus. Ikut dipasang ulang saat port diganti.
 - Proses agent `ABOVE_NORMAL_PRIORITY_CLASS`, thread runtime tokio `THREAD_PRIORITY_HIGHEST` (hook input tetap TIME_CRITICAL).
+- Perpindahan kursor antar perangkat sekarang hanya terjadi di bagian tepi yang benar-benar bersebelahan di layout. Di bagian tepi yang tidak bersebelahan dengan layar perangkat lain, kursor mentok (tidak pindah). Alasan: sebelumnya posisi kursor di luar rentang layar tujuan di-clamp ke ujung layar lain sehingga terasa melompat.
+- Versi dinaikkan ke v1.1.4 untuk perubahan perpindahan kursor di atas.

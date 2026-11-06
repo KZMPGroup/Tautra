@@ -283,26 +283,32 @@ impl Geometry {
         let in_group =
             |s: &Screen| candidate(&s.layout).is_some_and(|d| d <= nearest + ADJACENT_TOLERANCE);
 
+        let along_c = along.clamp(span_lo, span_hi);
         let mut best: Option<(usize, f64)> = None;
         for (i, s) in dst_dev.screens.iter().enumerate() {
             if !in_group(s) {
                 continue;
             }
             let (lo, hi) = span(&s.layout, horizontal);
-            let dist = if along < lo {
-                lo - along
-            } else if along >= hi {
-                along - hi
+            let lo = lo.max(span_lo);
+            let hi = hi.min(span_hi);
+            let dist = if along_c < lo {
+                lo - along_c
+            } else if along_c >= hi {
+                along_c - hi
             } else {
                 0.0
             };
+            if dist > ADJACENT_TOLERANCE {
+                continue;
+            }
             if best.is_none_or(|(_, d)| dist < d) {
                 best = Some((i, dist));
             }
         }
         let (target, _) = best?;
         let (lo, hi) = span(&dst_dev.screens[target].layout, horizontal);
-        let along_t = along.clamp(lo, hi);
+        let along_t = along_c.clamp(lo, hi);
 
         let r = dst_dev.screens[target].phys;
         let inset_x = ENTRY_INSET.min((r.right - r.left - 1).max(0));
