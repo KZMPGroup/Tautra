@@ -5,6 +5,8 @@ mod app;
 #[cfg(windows)]
 mod compat;
 #[cfg(windows)]
+mod cursor_guard;
+#[cfg(windows)]
 mod kvm;
 #[cfg(windows)]
 mod logon_sync;
@@ -46,6 +48,9 @@ fn main() -> ExitCode {
     if logon {
         tautra_common::paths::use_root(tautra_common::paths::logon_dir());
     }
+    if cursor_guard::requested() {
+        return cursor_guard::run();
+    }
     let logging = if in_service {
         tautra_common::logging::init_at("service", tautra_service::install::log_dir(), console)
     } else if logon {
@@ -83,6 +88,7 @@ fn main() -> ExitCode {
         }
     };
 
+    cursor_guard::spawn(logon);
     raise_priority();
     if !logon {
         sync_installed_version();

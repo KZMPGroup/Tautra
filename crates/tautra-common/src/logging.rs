@@ -10,9 +10,16 @@ use tracing_subscriber::{fmt, EnvFilter, Layer};
 
 use crate::paths;
 
-const MAX_LOG_FILES: usize = 7;
-const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
-const MAX_TOTAL_BYTES: u64 = 40 * 1024 * 1024;
+pub const DEV_LOG: bool = cfg!(feature = "devlog");
+pub const MODE: &str = if DEV_LOG { "dev" } else { "production" };
+const MAX_LOG_FILES: usize = if DEV_LOG { 14 } else { 7 };
+const MAX_FILE_BYTES: u64 = if DEV_LOG { 256 * 1024 * 1024 } else { 8 * 1024 * 1024 };
+const MAX_TOTAL_BYTES: u64 = if DEV_LOG { 1024 * 1024 * 1024 } else { 40 * 1024 * 1024 };
+const DEFAULT_FILTER: &str = if DEV_LOG {
+    "debug,tautra_agent=trace,tautra_ui=trace,tautra_input=trace,tautra_service=trace,tautra_common=trace,tautra_ipc=trace,tautra_net=trace,tautra_proto=trace,tautra_clipboard=trace,tautra_transfer=trace"
+} else {
+    "info"
+};
 const CAPPED_NOTE: &[u8] = b"log hari ini mencapai batas ukuran, baris berikutnya tidak dicatat sampai besok\n";
 
 fn utc_day() -> u64 {
@@ -147,13 +154,15 @@ pub fn init_at(component: &str, dir: PathBuf, console: bool) -> Result<LogGuard,
     });
 
     let filter =
-        || EnvFilter::try_from_env("TAUTRA_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
+        || EnvFilter::try_from_env("TAUTRA_LOG").unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
 
     let file_layer = fmt::layer()
         .with_writer(writer)
         .with_ansi(false)
         .with_target(true)
         .with_thread_names(true)
+        .with_thread_ids(DEV_LOG)
+        .with_line_number(DEV_LOG)
         .with_filter(filter());
 
     let console_layer = console.then(|| {
@@ -173,6 +182,8 @@ pub fn init_at(component: &str, dir: PathBuf, console: bool) -> Result<LogGuard,
     tracing::info!(
         component,
         version = crate::APP_VERSION,
+        mode = MODE,
+        pid = std::process::id(),
         log_dir = %dir.display(),
         "logging aktif"
     );

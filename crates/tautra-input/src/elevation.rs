@@ -111,6 +111,46 @@ pub fn foreground_blocks_injection() -> bool {
     window_blocks(unsafe { GetForegroundWindow() })
 }
 
+fn pid_above_medium(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    static CACHE: Mutex<Vec<(u32, bool, Instant)>> = Mutex::new(Vec::new());
+    if let Ok(guard) = CACHE.lock() {
+        if let Some((_, above, _)) = guard
+            .iter()
+            .find(|(cached, _, at)| *cached == pid && at.elapsed() < CACHE_TTL)
+        {
+            return *above;
+        }
+    }
+    let above = unsafe {
+        match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(process) => {
+                let level = process_integrity(process);
+                let _ = CloseHandle(process);
+                level.map(|l| l > MEDIUM_RID).unwrap_or(true)
+            }
+            Err(_) => true,
+        }
+    };
+    if let Ok(mut guard) = CACHE.lock() {
+        guard.retain(|(cached, _, at)| *cached != pid && at.elapsed() < CACHE_TTL);
+        guard.push((pid, above, Instant::now()));
+    }
+    above
+}
+
+pub fn foreground_above_medium() -> bool {
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.0.is_null() {
+        return false;
+    }
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    pid_above_medium(pid)
+}
+
 pub fn point_blocks_injection(x: i32, y: i32) -> bool {
     let hwnd = unsafe { WindowFromPoint(POINT { x, y }) };
     if hwnd.0.is_null() {

@@ -64,3 +64,7 @@ pub fn sync_logon(payload: LogonPayload) -> Result<(), ServiceError> {
 pub fn clear_logon() -> Result<(), ServiceError> {
     expect_ok(&ControlRequest::ClearLogon)
 }
+
+pub fn set_assist(on: bool) -> Result<(), ServiceError> {
+    expect_ok(&ControlRequest::SetAssist(on))
+}

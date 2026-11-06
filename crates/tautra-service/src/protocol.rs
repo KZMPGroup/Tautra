@@ -16,9 +16,11 @@ pub const LOGON_ARG: &str = "--logon";
 pub const SOURCE_FILE: &str = "source.txt";
 
 pub const CONTROL_PIPE: &str = r"\\.\pipe\tautra-service";
+pub const INPUT_ASSIST_PIPE: &str = r"\\.\pipe\tautra-input-assist";
 
 pub const CONTROL_SDDL: &str = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;AU)";
 pub const WORKER_SDDL: &str = "D:(A;;GA;;;SY)";
+pub const ASSIST_SDDL: &str = "D:(A;;GA;;;SY)(A;;GA;;;AU)";
 
 pub const BUFFER_SIZE: u32 = 16 * 1024;
 
@@ -30,6 +32,22 @@ pub enum ControlRequest {
     CheckUpdate,
     SyncLogon(LogonPayload),
     ClearLogon,
+    SetAssist(bool),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AssistInput {
+    Mouse { msg: u32, x: i32, y: i32, mouse_data: u32 },
+    Key { msg: u32, vk: u32, scan: u32, extended: bool },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AssistReply {
+    pub swallow: bool,
+    pub remote: bool,
+    pub park: Option<(i32, i32)>,
+    #[serde(default)]
+    pub place: Option<(i32, i32)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -63,6 +81,7 @@ pub enum WorkerRequest {
     Inject(Vec<ServiceInput>),
     SendSas,
     Ping,
+    SetAssist(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

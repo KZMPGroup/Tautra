@@ -14,7 +14,8 @@ pub use geometry::{DeviceGeometry, Geometry, Side};
 pub use guide::GuideOverlay;
 pub use hider::CursorHider;
 pub use hook::{
-    ActiveSide, DragCheck, HookController, HookOptions, HookStatus, Hotkeys, InputSink,
+    feed_external_key, feed_external_mouse, ActiveSide, DragCheck, ExternalOutcome, HookController,
+    HookOptions, HookStatus, Hotkeys, InputSink,
 };
 pub use inject::{InjectError, Injector};
 

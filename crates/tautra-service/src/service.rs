@@ -42,6 +42,7 @@ const LOGON_BACKOFF: Duration = Duration::from_secs(5);
 
 static STOP: AtomicBool = AtomicBool::new(false);
 static STATUS_HANDLE: AtomicUsize = AtomicUsize::new(0);
+static ASSIST_WANT: AtomicBool = AtomicBool::new(false);
 
 struct Token(HANDLE);
 
@@ -221,6 +222,12 @@ fn control_handler(state: &Mutex<ServiceState>, request: &[u8]) -> Vec<u8> {
             Ok(()) => ControlReply::Ok,
             Err(e) => ControlReply::Error(e),
         },
+        Ok(ControlRequest::SetAssist(on)) => {
+            if ASSIST_WANT.swap(on, Ordering::SeqCst) != on {
+                tracing::info!(aktif = on, "agent meminta hook bantuan");
+            }
+            worker_call(&WorkerRequest::SetAssist(on))
+        }
         Err(e) => ControlReply::Error(format!("permintaan tidak dimengerti: {e}")),
     };
     serde_json::to_vec(&reply).unwrap_or_default()
@@ -283,6 +290,7 @@ fn supervise(state: Arc<Mutex<ServiceState>>) {
     let mut logon: Option<Child> = None;
     let mut logon_session: Option<u32> = None;
     let mut logon_started = Instant::now() - LOGON_BACKOFF;
+    let mut assist_synced = false;
 
     while !STOP.load(Ordering::SeqCst) {
         match active_session() {
@@ -296,6 +304,7 @@ fn supervise(state: Arc<Mutex<ServiceState>>) {
                         .and_then(|token| spawn(&token, &worker_command, Some("Default")));
                     worker_session = worker.as_ref().map(|_| session);
                     worker_desktop = None;
+                    assist_synced = false;
                     if worker.is_some() {
                         tracing::info!(session, "worker injeksi dijalankan");
                     }
@@ -305,6 +314,22 @@ fn supervise(state: Arc<Mutex<ServiceState>>) {
                     if worker.as_ref().is_some_and(|w| w.alive()) {
                         if let Some(name) = ping_worker() {
                             worker_desktop = Some(name);
+                        }
+                        let want = ASSIST_WANT.load(Ordering::SeqCst);
+                        match worker_call(&WorkerRequest::SetAssist(want)) {
+                            ControlReply::Ok => {
+                                if !assist_synced {
+                                    tracing::info!(aktif = want, "hook bantuan worker disinkronkan");
+                                }
+                                assist_synced = true;
+                            }
+                            ControlReply::Error(e) => {
+                                if assist_synced {
+                                    tracing::warn!("hook bantuan worker gagal diatur: {e}");
+                                }
+                                assist_synced = false;
+                            }
+                            _ => {}
                         }
                     }
                 }

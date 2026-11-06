@@ -104,3 +104,48 @@ pub fn status() -> tautra_ipc::api::ServiceStatus {
     let (installed, running) = tautra_service::install::query();
     tautra_ipc::api::ServiceStatus { installed, running }
 }
+
+pub fn set_assist(on: bool) -> bool {
+    static LAST_OK: Mutex<Option<bool>> = Mutex::new(None);
+    let result = tautra_service::client::set_assist(on);
+    let ok = result.is_ok();
+    if let Ok(mut last) = LAST_OK.lock() {
+        if *last != Some(ok) {
+            *last = Some(ok);
+            match &result {
+                Ok(()) => tracing::info!(aktif = on, "hook bantuan layanan untuk jendela admin diatur"),
+                Err(e) => tracing::warn!(
+                    "hook bantuan layanan tidak bisa diatur, kursor tidak akan menyeberang saat jendela admin fokus: {e}"
+                ),
+            }
+        }
+    }
+    ok
+}
+
+pub fn serve_input_assist() {
+    use tautra_service::protocol::{AssistInput, AssistReply, ASSIST_SDDL, INPUT_ASSIST_PIPE};
+    std::thread::Builder::new()
+        .name("tautra-assist-pipe".into())
+        .spawn(|| {
+            static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            let _ = tautra_service::pipe::serve(INPUT_ASSIST_PIPE, ASSIST_SDDL, &STOP, |request| {
+                let reply = match serde_json::from_slice::<AssistInput>(request) {
+                    Ok(AssistInput::Mouse { msg, x, y, mouse_data }) => {
+                        let o = tautra_input::feed_external_mouse(msg, x, y, mouse_data);
+                        AssistReply { swallow: o.swallow, remote: o.remote, park: o.park, place: o.place }
+                    }
+                    Ok(AssistInput::Key { msg, vk, scan, extended }) => {
+                        let o = tautra_input::feed_external_key(msg, vk, scan, extended);
+                        AssistReply { swallow: o.swallow, remote: o.remote, park: o.park, place: o.place }
+                    }
+                    Err(e) => {
+                        tracing::warn!("permintaan hook bantuan dari layanan tidak dimengerti: {e}");
+                        AssistReply::default()
+                    }
+                };
+                serde_json::to_vec(&reply).unwrap_or_default()
+            });
+        })
+        .ok();
+}

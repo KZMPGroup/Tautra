@@ -18,7 +18,7 @@ pub use manifest::{build_manifest, Manifest, MAX_ENTRIES};
 pub use path::safe_relative;
 
 #[cfg(windows)]
-pub use drag::{shell_data, DragEffect, DragLabel};
+pub use drag::{shell_data, DragEffect, DragLabel, Prepare};
 #[cfg(windows)]
 pub use fetch::{stream_file, BlockingReader};
 #[cfg(windows)]

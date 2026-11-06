@@ -293,3 +293,67 @@ Dihapus: fitur layar tambahan tidak ada lagi sejak 2026-10-28. Setelah build bar
 - Proses agent `ABOVE_NORMAL_PRIORITY_CLASS`, thread runtime tokio `THREAD_PRIORITY_HIGHEST` (hook input tetap TIME_CRITICAL).
 - Perpindahan kursor antar perangkat sekarang hanya terjadi di bagian tepi yang benar-benar bersebelahan di layout. Di bagian tepi yang tidak bersebelahan dengan layar perangkat lain, kursor mentok (tidak pindah). Alasan: sebelumnya posisi kursor di luar rentang layar tujuan di-clamp ke ujung layar lain sehingga terasa melompat.
 - Versi dinaikkan ke v1.1.4 untuk perubahan perpindahan kursor di atas.
+
+## 2026-11-06 — Drag file dari VS Code / aplikasi Electron
+- Masalah: drag file dari VS Code (explorer atau tab) tidak bisa tembus ke perangkat lain, padahal dari File Explorer bisa.
+- Penyebab: VS Code (Chromium) tidak menyediakan `CF_HDROP` biasa. Daftar path lengkap (termasuk folder dan banyak file) hanya ada di `CF_UNICODETEXT`, sedangkan `CF_HDROP` cuma untuk file pertama dan memakai unduhan tertunda Chromium yang gagal/lambat saat dibaca jendela probe.
+- Solusi (`tautra-transfer/src/probe.rs`): drag dianggap berisi file bila ada `CF_HDROP`, atau bila ada penanda drag file (format `Chromium Web Custom MIME Data Format` atau `UniformResourceLocatorW` berskema `file:`) dan setiap baris `CF_UNICODETEXT` adalah path absolut / URL `file://` yang benar-benar ada. Saat drop, path dari teks dipakai lebih dulu (tanpa memicu unduhan Chromium), `CF_HDROP` jadi cadangan.
+- Efek drop mengikuti efek yang diizinkan sumber (COPY, atau LINK bila COPY tidak diizinkan). MOVE tidak pernah dipakai agar sumber tidak menghapus file.
+- Drag yang ditolak mencatat daftar format datanya di log (sekali per kombinasi format) untuk diagnosa aplikasi lain.
+- Versi dinaikkan ke v1.1.5.
+
+## 2026-11-06 — Folder hasil drag bisa di-drop ke semua aplikasi
+- Masalah: drag folder dari VS Code sudah tembus ke perangkat lain, tapi tidak bisa di-drop ke VS Code di sana. File tunggal bisa.
+- Penyebab: penerima hanya menyediakan file virtual (`FileGroupDescriptorW` + `FileContents`). Explorer mengerti folder di file virtual, tetapi VS Code/Chromium dan banyak aplikasi lain hanya mengerti `CF_HDROP` (path file asli) dan tidak bisa membuat folder dari file virtual.
+- Solusi: objek data drag di penerima (`tautra-clipboard`, `create_drag_object`) kini menyediakan `CF_HDROP` untuk aplikasi selain Explorer. Jalur yang diberikan ada di `%LOCALAPPDATA%\Tautra\drop\<offer>`; item teratas dibuat sebagai placeholder saat aplikasi pertama kali meminta. Saat tombol mouse dilepas, `IDropSource::QueryContinueDrag` menjalankan `Prepare` (`share/stage.rs`) yang mengunduh seluruh file/folder ke folder itu sebelum aplikasi tujuan menerima drop, lalu baru mengembalikan DROP.
+- Explorer (proses `explorer.exe`, termasuk desktop) tetap memakai file virtual supaya progres dan salinan langsung dari Explorer tetap dipakai; untuk target itu `CF_HDROP` disembunyikan, dan untuk aplikasi lain file virtual disembunyikan. Keputusan target dikunci saat drop agar salinan Explorer yang berjalan lama tetap bisa membaca `FileContents`.
+- Bila unduhan gagal, drag dibatalkan dan alasannya tampil sebagai notifikasi. Folder drop yang lebih tua dari 24 jam dihapus otomatis.
+- Versi dinaikkan ke v1.1.6.
+
+## 2026-11-06 — Kursor selalu kembali setelah agent crash / dihentikan
+- Masalah: di PC utama, bila kursor sedang di perangkat lain lalu agent tiba-tiba crash, di-kill, atau keluar, kursor lokal tetap tidak terlihat (masih bisa digerakkan dan klik, tapi tanpa gambar).
+- Penyebab: kursor disembunyikan dengan `SetSystemCursor` (berlaku untuk seluruh sesi Windows dan tidak ikut hilang saat proses mati). Pemulihan hanya terjadi lewat Drop di thread KVM atau saat agent start lagi, jadi `TerminateProcess` (Quit setelah 4 detik, End task, crash) meninggalkan kursor kosong.
+- Solusi: tiap agent (termasuk agent layar login `--logon`) menjalankan proses penjaga kecil `tautra-agent.exe --cursor-guard <pid>` saat start. Penjaga hanya menunggu handle proses agent (tanpa CPU) lalu keluar bersamaan dengan agent. Agent membuat event bernama `Local\Tautra.CursorHidden.<pid>`: di-set saat kursor disembunyikan, di-reset setelah `SPI_SETCURSORS`. Saat agent mati dengan event masih ter-set, penjaga memanggil `SPI_SETCURSORS` sehingga skema kursor pengguna dimuat ulang, dan mencatatnya di log komponen `cursor`.
+- Penjaga dijalankan dengan `CREATE_BREAKAWAY_FROM_JOB` (fallback tanpa flag) agar tetap hidup bila agent dimatikan bersama job. Pemulihan saat start agent tetap ada sebagai lapisan kedua. Tidak dipakai overlay transparan karena kursor tetap terlihat di atas jendela topmost lain, UAC, dan layar penuh.
+- Versi dinaikkan ke v1.1.7.
+
+## 2026-11-06 — Hook input tetap jalan di atas jendela admin (Task Manager/UAC)
+- Masalah: saat jendela ber-hak lebih tinggi sedang fokus di PC utama (Task Manager, jendela administrator, UAC), kursor tidak bisa menyeberang ke perangkat lain dan kontrol terasa macet. Klik/Win tetap jalan karena itu input langsung ke jendela admin.
+- Penyebab: hook WH_MOUSE_LL/WH_KEYBOARD_LL milik agent berjalan di integrity medium. Windows tidak mengirim event mouse/keyboard ke hook proses yang lebih rendah selagi jendela ber-integrity lebih tinggi sedang fokus, jadi agent "buta" dan tidak melihat gerakan untuk menyeberang. Sisi injeksi sudah ditangani lewat layanan SYSTEM; sisi penangkapan belum.
+- Solusi: worker injeksi layanan (SYSTEM, di sesi konsol WinSta0\Default) kini juga memasang WH_MOUSE_LL + WH_KEYBOARD_LL. Proses SYSTEM tetap melihat input walau jendela admin fokus. Worker hanya aktif saat (a) sesi KVM sedang jalan dan (b) jendela depan ber-integrity di atas medium (`tautra_input::elevation::foreground_above_medium`, cache 1 detik) — jadi tidak ada overhead saat idle. Saat aktif, worker meneruskan tiap event ke agent lewat pipe `tautra-input-assist` dan agent memprosesnya lewat state machine hook yang sama (satu state, bukan duplikat), lalu membalas apakah event ditelan.
+- Saat kontrol lokal, worker hanya meneruskan gerakan mouse (untuk mendeteksi penyeberangan); klik/ketik diteruskan ke jendela admin seperti biasa. Begitu menyeberang (state jadi remote), worker menelan semua input dan meneruskannya ke perangkat lain. Karena state-nya tunggal di agent, perpindahan fokus admin di tengah sesi tidak memutus kontrol.
+- Pengaktifan: agent mengirim `SetAssist(true/false)` ke layanan saat sesi KVM mulai/berhenti; layanan meneruskan ke worker dan menyinkronkan ulang bila worker dijalankan ulang (ganti sesi). Protokol layanan menambah `ControlRequest::SetAssist` dan `WorkerRequest::SetAssist`; agent menyajikan pipe `tautra-input-assist` (`tautra_input::feed_external_mouse/key`).
+- Perubahan ada di bagian paling sensitif (hook input) dan belum diuji — perlu uji fisik dua perangkat dengan Task Manager/jendela admin terbuka: menyeberang saat Task Manager fokus, dan kontrol tetap jalan saat jendela admin muncul selagi kontrol di perangkat lain. Perlu pasang ulang layanan sekali (worker adalah salinan tautra-agent.exe).
+- Versi dinaikkan ke v1.1.8.
+
+## 2026-11-06 — Kursor muncul kembali di perangkat yang diambil alih
+- Masalah: saat kontrol menyeberang ke perangkat lain, perangkat itu malah tidak menampilkan kursor sama sekali.
+- Penyebab: perangkat yang dikendalikan menyembunyikan kursornya sendiri saat menganggur (SetSystemCursor) agar tidak ada kursor nyasar. Pemulihan hanya bergantung pada Drop CursorHider saat `Enter`; bila pemulihan itu tidak sempat berjalan, kursor tetap kosong.
+- Solusi: saat pesan `Enter` diterima (perangkat ini mulai dikendalikan), selain melepas CursorHider, kini `tautra_input::cursor::restore()` dipanggil eksplisit sehingga skema kursor selalu dimuat ulang dan kursor pasti terlihat sebelum injeksi gerakan pertama.
+- Versi dinaikkan ke v1.1.9.
+
+## 2026-11-06 — Hook bantuan jendela admin: sinkronisasi dan log (v1.1.10)
+- Uji v1.1.9: Task Manager fokus di PC utama, kursor tetap tidak menyeberang. Log menunjukkan worker layanan sudah memasang hook bantuan dan pipe `tautra-input-assist` ada, tetapi tidak ada jejak permintaan `SetAssist` dari agent (kegagalan hanya dicatat di level debug, dan permintaan hanya dikirim sekali saat hook dibuat).
+- Perbaikan: layanan mengirim `SetAssist(ASSIST_WANT)` ke worker pada setiap ping (2 detik), bukan sekali; agent mengulang `SetAssist(true)` tiap ~10 detik selama hook aktif (`reassert_assist` di `poll_displays`), dan mencatat INFO/WARN saat status berubah. Worker mencatat saat hook bantuan diaktifkan dan saat pertama kali meneruskan input di atas jendela admin, serta WARN bila agent tidak bisa dihubungi.
+- Versi dinaikkan ke v1.1.10.
+
+## 2026-11-06 — Mode build DEV vs PRODUCTION dan log lengkap (v1.1.11)
+- Aturan tetap dari pengguna: setiap build lokal untuk uji adalah build **DEV** dan harus mencatat log lengkap semua kejadian (hook, layanan, relay jendela admin, kursor di kedua perangkat, sukses maupun gagal). Hanya build yang dirilis ke GitHub yang **PRODUCTION** (log level info).
+- Implementasi: fitur cargo `devlog` di `tautra-common` (diteruskan oleh `tautra-agent` dan `tautra-ui`). Dengan fitur ini filter log bawaan menjadi `trace` untuk semua crate `tautra_*` (`debug` untuk crate lain), batas file log 256 MB/hari dan total 1 GB, baris log memuat id thread dan nomor baris, dan baris `logging aktif` memuat `mode=dev|production` serta pid.
+- Script build: `npm run build:dev` (tauri build dengan `--features devlog` dan `src-tauri/tauri.devlog.conf.json` yang memanggil `agent:devlog`) untuk uji lokal; `npm run build:prod` (sama dengan sebelumnya) untuk rilis GitHub.
+- Bug terbuka: Task Manager fokus di PC utama lalu kursor diseberangkan, kursor hilang di kedua PC dan di PC lain menempel di pojok. Dugaan: satu event gerak yang tidak ditelan membuat kursor fisik bergeser dari titik parkir, sehingga setiap event berikutnya membawa selisih yang sama dan kursor jarak jauh lari ke pojok. Perbaikan defensif: `remote_move` dan worker layanan memarkir ulang kursor fisik bila bergeser (`repark`, balasan `AssistReply.park`), dan bila thread hook agent tidak menjawab dalam 150 ms worker tetap menelan event selama mode jarak jauh (`external_fallback`).
+- Log baru: setiap event relay dengan durasinya (WARN bila > 30 ms karena Windows bisa melepas hook LL yang lambat), perubahan status jendela depan di atas medium, pindah/kembali perangkat beserta posisi kursor fisik, hide/restore kursor di kedua sisi, Enter/Leave di perangkat yang dikendalikan, lompatan besar dari titik parkir.
+- Versi dinaikkan ke v1.1.11.
+
+## 2026-11-06 — Kursor kembali ke titik yang benar saat jendela admin fokus (v1.1.12)
+- Uji v1.1.11: kursor sudah bisa menyeberang saat Task Manager/UAC fokus, tetapi saat kembali kursor muncul di tengah layar PC ini.
+- Log dev menunjukkan penyebabnya: saat jendela admin di depan, `SetCursorPos` dari agent (integritas medium) ditolak UIPI (`posisi kursor gagal diatur ... x=2 y=859`, lalu `cursor=Some((960, 540))`), jadi kursor tertinggal di titik parkir tengah.
+- Perbaikan: setiap `place_cursor` di thread hook mencatat posisi yang diminta; bila event berasal dari worker layanan, posisi itu dikirim di `AssistReply.place` dan worker (SYSTEM) yang memanggil `SetCursorPos`. Log baru: "posisi kursor diserahkan ke worker layanan" (agent) dan "worker meletakkan kursor sesuai permintaan agent" (layanan). WARN palsu saat SetCursorPos melapor gagal tetapi kursor sudah di posisi diturunkan ke debug.
+- Versi dinaikkan ke v1.1.12.
+
+## 2026-11-06 — Home menampilkan peringatan layanan, kartu Jaringan dihapus (v1.1.13)
+- Permintaan pengguna: Home harus menampilkan hal penting saja, misalnya ajakan memasang layanan bila belum terpasang; info jaringan tidak penting.
+- Home kini menampilkan kartu "Layanan Windows" paling atas hanya jika layanan belum terpasang atau tidak berjalan, lengkap dengan tombol Pasang layanan (status diperiksa tiap 10 detik). Bila layanan sudah berjalan, kartu tidak muncul.
+- Kartu Jaringan dihapus dari Home. Jaringan yang tidak diizinkan tetap terlihat lewat petunjuk di kartu Koneksi.
+- Teks memakai kunci terjemahan yang sudah ada (`input.service*`), jadi semua 25 bahasa langsung ikut.
+- Versi dinaikkan ke v1.1.13.

@@ -8,6 +8,9 @@ publish.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+devlog = []
+
 [dependencies]
 anyhow.workspace = true
 thiserror.workspace = true

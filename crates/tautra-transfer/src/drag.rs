@@ -1,7 +1,7 @@
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use windows::core::{implement, w, BOOL, HRESULT, PCWSTR};
 use windows::Win32::Foundation::{
@@ -52,6 +52,8 @@ pub enum DragEffect {
     None,
     Copy,
 }
+
+pub type Prepare = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 
 pub struct DragLabel {
     pub name: String,
@@ -118,6 +120,8 @@ struct DragSource {
     data: IDataObject,
     layered: u16,
     native: bool,
+    prepare: Option<Prepare>,
+    failed: Arc<Mutex<Option<String>>>,
 }
 
 impl IDropSource_Impl for DragSource_Impl {
@@ -129,6 +133,12 @@ impl IDropSource_Impl for DragSource_Impl {
             return DRAGDROP_S_CANCEL;
         }
         if grfkeystate.0 & MK_LBUTTON.0 == 0 {
+            if let Some(prepare) = &self.prepare {
+                if let Err(reason) = prepare() {
+                    *self.failed.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason);
+                    return DRAGDROP_S_CANCEL;
+                }
+            }
             return DRAGDROP_S_DROP;
         }
         S_OK
@@ -281,6 +291,7 @@ pub fn run(
     label: &DragLabel,
     cancel: Arc<AtomicBool>,
     native: bool,
+    prepare: Option<Prepare>,
 ) -> Result<DragEffect, String> {
     let layered = register(w!("IsShowingLayered"));
     let logical = register(w!("Logical Performed DropEffect"));
@@ -292,17 +303,23 @@ pub fn run(
         hide_modifiers();
         DROPEFFECT_COPY
     };
+    let failed = Arc::new(Mutex::new(None));
     let source: IDropSource = DragSource {
         cancel,
         data: data.clone(),
         layered,
         native,
+        prepare,
+        failed: failed.clone(),
     }
     .into();
     let mut effect = DROPEFFECT_NONE;
     let hr = unsafe { DoDragDrop(data, &source, allowed, &mut effect) };
     if hr == DRAGDROP_S_CANCEL {
-        return Ok(DragEffect::None);
+        return match failed.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            Some(reason) => Err(reason),
+            None => Ok(DragEffect::None),
+        };
     }
     if hr != DRAGDROP_S_DROP {
         return Err(format!("DoDragDrop gagal: {}", windows::core::Error::from_hresult(hr).message()));

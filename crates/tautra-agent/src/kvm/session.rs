@@ -24,6 +24,7 @@ use super::sink::KvmSink;
 use crate::app::Agent;
 
 const DISPLAY_POLL: Duration = Duration::from_secs(2);
+const ASSIST_REASSERT_TICKS: u32 = 5;
 const BLOCKED_NOTICE_INTERVAL: Duration = Duration::from_secs(15);
 const QUEUE: usize = 512;
 const DRAG_POLL: Duration = Duration::from_millis(15);
@@ -80,6 +81,8 @@ struct Ctx {
     layout: Option<PairLayout>,
     hook: Option<HookController>,
     hook_failed: bool,
+    assist_on: bool,
+    assist_ticks: u32,
     sink: Arc<KvmSink>,
     out: mpsc::Sender<KvmMessage>,
     injector: Injector,
@@ -190,6 +193,8 @@ pub async fn run(
         layout: None,
         hook: None,
         hook_failed: false,
+        assist_on: false,
+        assist_ticks: 0,
         out: out_tx,
         injector: Injector::new(),
         controlled: false,
@@ -428,6 +433,7 @@ impl Ctx {
                         Ok(hook) => {
                             self.hook = Some(hook);
                             self.hook_failed = false;
+                            self.set_assist(true);
                         }
                         Err(e) => {
                             if !self.hook_failed {
@@ -445,8 +451,29 @@ impl Ctx {
             }
         } else {
             self.hook = None;
+            self.set_assist(false);
         }
         self.publish();
+    }
+
+    fn set_assist(&mut self, on: bool) {
+        if self.assist_on == on {
+            return;
+        }
+        self.assist_on = on;
+        self.assist_ticks = 0;
+        crate::service::set_assist(on);
+    }
+
+    fn reassert_assist(&mut self) {
+        if !self.assist_on {
+            return;
+        }
+        self.assist_ticks += 1;
+        if self.assist_ticks >= ASSIST_REASSERT_TICKS {
+            self.assist_ticks = 0;
+            crate::service::set_assist(true);
+        }
     }
 
     fn view(&self) -> Option<LayoutView> {
@@ -574,12 +601,29 @@ impl Ctx {
                 }
                 self.controlled = true;
                 self.drag_hold = false;
+                tracing::info!(
+                    x,
+                    y,
+                    cursor = ?tautra_input::cursor::position(),
+                    hider = self.hider.is_some(),
+                    "perangkat ini mulai dikendalikan"
+                );
                 self.hider = None;
+                match tautra_input::cursor::restore() {
+                    Ok(()) => tracing::info!("kursor perangkat ini dimunculkan saat diambil alih"),
+                    Err(e) => tracing::warn!("kursor perangkat ini gagal dimunculkan saat diambil alih: {e}"),
+                }
                 let result = self.injector.move_to(x, y);
                 self.injected(result);
+                tracing::info!(cursor = ?tautra_input::cursor::position(), "kursor diletakkan di titik masuk");
                 self.publish();
             }
             KvmMessage::Leave => {
+                tracing::info!(
+                    controlled = self.controlled,
+                    cursor = ?tautra_input::cursor::position(),
+                    "kursor meninggalkan perangkat ini"
+                );
                 self.drag_hold = false;
                 self.drop_pending("kursor sudah kembali ke perangkat lain");
                 self.agent.share.cancel_drag();
@@ -946,6 +990,7 @@ impl Ctx {
     }
 
     fn poll_displays(&mut self) {
+        self.reassert_assist();
         if self.guide_until.is_some_and(|until| Instant::now() >= until) {
             self.hide_guide();
         }
@@ -964,7 +1009,10 @@ impl Ctx {
 
     fn hide_idle_cursor(&mut self) {
         match CursorHider::start() {
-            Ok(hider) => self.hider = Some(hider),
+            Ok(hider) => {
+                tracing::info!("kursor perangkat ini disembunyikan selama menganggur");
+                self.hider = Some(hider)
+            }
             Err(e) => tracing::warn!("kursor perangkat ini tidak bisa disembunyikan: {e}"),
         }
     }
@@ -981,6 +1029,7 @@ impl Ctx {
         self.hide_guide();
         self.hider = None;
         self.hook = None;
+        self.set_assist(false);
         self.injector.release_all();
         self.controlled = false;
     }

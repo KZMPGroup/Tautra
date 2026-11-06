@@ -1,7 +1,7 @@
 {
   "name": "tautra-ui",
   "private": true,
-  "version": "1.1.4",
+  "version": "1.1.13",
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -9,7 +9,10 @@
     "build": "tsc --noEmit && vite build",
     "tauri": "tauri",
     "agent:debug": "cargo build -p tautra-agent",
-    "agent:release": "cargo build --release -p tautra-agent"
+    "agent:release": "cargo build --release -p tautra-agent",
+    "agent:devlog": "cargo build --release -p tautra-agent --features devlog",
+    "build:dev": "tauri build --no-bundle --features devlog --config src-tauri/tauri.devlog.conf.json",
+    "build:prod": "tauri build --no-bundle"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

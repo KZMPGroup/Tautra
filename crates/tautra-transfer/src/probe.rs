@@ -7,16 +7,21 @@ use std::thread::JoinHandle;
 
 use windows::core::{implement, w, Ref, Result as WinResult, PCWSTR};
 use windows::Win32::Foundation::{
-    COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, POINTL, WPARAM,
+    COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, POINTL, S_OK, WPARAM,
 };
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
-use windows::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
+use windows::Win32::System::Com::{
+    CoTaskMemFree, IDataObject, DATADIR_GET, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL,
+};
+use windows::Win32::System::DataExchange::{GetClipboardFormatNameW, RegisterClipboardFormatW};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 use windows::Win32::System::Ole::{
     IDropTarget, IDropTarget_Impl, OleInitialize, OleUninitialize, RegisterDragDrop,
-    ReleaseStgMedium, RevokeDragDrop, CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_NONE,
+    ReleaseStgMedium, RevokeDragDrop, CF_HDROP, CF_UNICODETEXT, DROPEFFECT, DROPEFFECT_COPY,
+    DROPEFFECT_LINK, DROPEFFECT_NONE,
 };
 use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -26,7 +31,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
 
-use crate::drag::{self, DragEffect, DragLabel};
+use crate::drag::{self, DragEffect, DragLabel, Prepare};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClassNameW, GetCursorPos,
     GetForegroundWindow, GetMessageW, WindowFromPoint,
@@ -94,6 +99,7 @@ pub struct DragRequest {
     pub data: Box<dyn FnOnce() -> Result<IDataObject, String> + Send>,
     pub label: DragLabel,
     pub native: bool,
+    pub prepare: Option<Prepare>,
     pub done: Box<dyn FnOnce(DragOutcome) + Send>,
 }
 
@@ -101,6 +107,7 @@ struct Armed {
     data: IDataObject,
     label: DragLabel,
     native: bool,
+    prepare: Option<Prepare>,
     done: Box<dyn FnOnce(DragOutcome) + Send>,
 }
 
@@ -128,9 +135,12 @@ thread_local! {
     static ARMED: RefCell<Option<Armed>> = const { RefCell::new(None) };
 }
 
-fn files_format() -> FORMATETC {
+const TEXT_LIMIT: usize = 1 << 20;
+const LINE_LIMIT: usize = 4096;
+
+fn format_of(format: u16) -> FORMATETC {
     FORMATETC {
-        cfFormat: CF_HDROP.0,
+        cfFormat: format,
         ptd: std::ptr::null_mut(),
         dwAspect: DVASPECT_CONTENT.0,
         lindex: -1,
@@ -138,13 +148,161 @@ fn files_format() -> FORMATETC {
     }
 }
 
-fn has_files(data: &IDataObject) -> bool {
-    let format = files_format();
-    unsafe { data.QueryGetData(&format) }.is_ok()
+fn register(name: PCWSTR) -> u16 {
+    unsafe { RegisterClipboardFormatW(name) as u16 }
 }
 
-fn read_files(data: &IDataObject) -> Vec<PathBuf> {
-    let format = files_format();
+fn offers(data: &IDataObject, format: u16) -> bool {
+    let query = format_of(format);
+    unsafe { data.QueryGetData(&query) }.is_ok()
+}
+
+fn read_text(data: &IDataObject, format: u16) -> Option<String> {
+    if !offers(data, format) {
+        return None;
+    }
+    let query = format_of(format);
+    let mut medium = unsafe { data.GetData(&query) }.ok()?;
+    let mut text = None;
+    if medium.tymed == TYMED_HGLOBAL.0 as u32 {
+        unsafe {
+            let handle = medium.u.hGlobal;
+            let size = GlobalSize(handle).min(TEXT_LIMIT * 2);
+            let ptr = GlobalLock(handle) as *const u16;
+            if !ptr.is_null() {
+                let units = std::slice::from_raw_parts(ptr, size / 2);
+                let len = units.iter().position(|&c| c == 0).unwrap_or(units.len());
+                text = Some(String::from_utf16_lossy(&units[..len]));
+                let _ = GlobalUnlock(handle);
+            }
+        }
+    }
+    unsafe { ReleaseStgMedium(&mut medium) };
+    text
+}
+
+fn hex(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn percent_decode(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            out.push(hex(bytes[i + 1])? << 4 | hex(bytes[i + 2])?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+fn is_file_url(value: &str) -> bool {
+    value.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("file:"))
+}
+
+fn file_url_path(value: &str) -> Option<PathBuf> {
+    let rest = value.get(5..)?.strip_prefix("//")?;
+    let rest = rest.split(['?', '#']).next().unwrap_or_default();
+    let decoded = percent_decode(rest)?;
+    let (host, path) = match decoded.find('/') {
+        Some(i) => (&decoded[..i], &decoded[i..]),
+        None => (decoded.as_str(), ""),
+    };
+    let path = if host.is_empty() || host.eq_ignore_ascii_case("localhost") {
+        path.trim_start_matches('/').replace('/', "\\")
+    } else {
+        format!("\\\\{host}{}", path.replace('/', "\\"))
+    };
+    Some(PathBuf::from(path))
+}
+
+fn parse_path(line: &str) -> Option<PathBuf> {
+    let line = line.trim().trim_matches('"');
+    if line.is_empty() {
+        return None;
+    }
+    let path = if is_file_url(line) {
+        file_url_path(line)?
+    } else {
+        PathBuf::from(line)
+    };
+    (path.is_absolute() && std::fs::symlink_metadata(&path).is_ok()).then_some(path)
+}
+
+fn text_paths(data: &IDataObject) -> Vec<PathBuf> {
+    let Some(text) = read_text(data, CF_UNICODETEXT.0) else {
+        return Vec::new();
+    };
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.is_empty() || lines.len() > LINE_LIMIT {
+        return Vec::new();
+    }
+    let mut paths = Vec::with_capacity(lines.len());
+    for line in lines {
+        match parse_path(line) {
+            Some(path) if !paths.contains(&path) => paths.push(path),
+            Some(_) => {}
+            None => return Vec::new(),
+        }
+    }
+    paths
+}
+
+fn file_hint(data: &IDataObject) -> bool {
+    if offers(data, register(w!("Chromium Web Custom MIME Data Format"))) {
+        return true;
+    }
+    read_text(data, register(w!("UniformResourceLocatorW"))).is_some_and(|url| is_file_url(url.trim()))
+}
+
+fn has_files(data: &IDataObject) -> bool {
+    offers(data, CF_HDROP.0) || (file_hint(data) && !text_paths(data).is_empty())
+}
+
+fn format_name(format: u16) -> String {
+    let mut buf = [0u16; 128];
+    let len = unsafe { GetClipboardFormatNameW(format as u32, &mut buf) }.max(0) as usize;
+    if len == 0 {
+        format.to_string()
+    } else {
+        String::from_utf16_lossy(&buf[..len])
+    }
+}
+
+fn describe_formats(data: &IDataObject) -> String {
+    let Ok(list) = (unsafe { data.EnumFormatEtc(DATADIR_GET.0 as u32) }) else {
+        return String::new();
+    };
+    let mut names = Vec::new();
+    for _ in 0..64 {
+        let mut item = [FORMATETC::default()];
+        let mut fetched = 0u32;
+        if unsafe { list.Next(&mut item, Some(&mut fetched as *mut u32)) } != S_OK || fetched == 0 {
+            break;
+        }
+        if !item[0].ptd.is_null() {
+            unsafe { CoTaskMemFree(Some(item[0].ptd as *const _)) };
+        }
+        let name = format_name(item[0].cfFormat);
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names.join(", ")
+}
+
+fn hdrop_paths(data: &IDataObject) -> Vec<PathBuf> {
+    let format = format_of(CF_HDROP.0);
     let Ok(mut medium) = (unsafe { data.GetData(&format) }) else {
         return Vec::new();
     };
@@ -166,6 +324,31 @@ fn read_files(data: &IDataObject) -> Vec<PathBuf> {
     paths
 }
 
+fn read_files(data: &IDataObject) -> Vec<PathBuf> {
+    if file_hint(data) {
+        let paths = text_paths(data);
+        if !paths.is_empty() {
+            return paths;
+        }
+    }
+    hdrop_paths(data)
+}
+
+fn accepted(allowed: *mut DROPEFFECT) -> DROPEFFECT {
+    let allowed = if allowed.is_null() {
+        DROPEFFECT_COPY
+    } else {
+        unsafe { *allowed }
+    };
+    if allowed.0 & DROPEFFECT_COPY.0 != 0 {
+        DROPEFFECT_COPY
+    } else if allowed.0 & DROPEFFECT_LINK.0 != 0 {
+        DROPEFFECT_LINK
+    } else {
+        DROPEFFECT_COPY
+    }
+}
+
 fn set_effect(effect: *mut DROPEFFECT, value: DROPEFFECT) {
     if !effect.is_null() {
         unsafe { *effect = value };
@@ -177,9 +360,19 @@ struct ProbeTarget {
     shared: Shared,
     hwnd: isize,
     on_drop: DropHandler,
+    rejected: Mutex<String>,
 }
 
 impl ProbeTarget {
+    fn note_rejected(&self, data: &IDataObject) {
+        let formats = describe_formats(data);
+        let mut last = self.rejected.lock().unwrap_or_else(|e| e.into_inner());
+        if *last != formats {
+            tracing::info!(%formats, "drag ditolak: tidak ada file yang dikenali");
+            *last = formats;
+        }
+    }
+
     fn hide(&self) {
         let hwnd = HWND(self.hwnd as *mut _);
         unsafe {
@@ -197,7 +390,13 @@ impl IDropTarget_Impl for ProbeTarget_Impl {
         _pt: &POINTL,
         pdweffect: *mut DROPEFFECT,
     ) -> WinResult<()> {
-        let files = pdataobj.ok().is_ok_and(has_files);
+        let data = pdataobj.ok().ok();
+        let files = data.is_some_and(has_files);
+        if !files {
+            if let Some(data) = data {
+                self.note_rejected(data);
+            }
+        }
         if matches!(
             self.shared.get(),
             ProbeState::Probing | ProbeState::Files | ProbeState::NoFiles
@@ -211,7 +410,7 @@ impl IDropTarget_Impl for ProbeTarget_Impl {
         set_effect(
             pdweffect,
             if files {
-                DROPEFFECT_COPY
+                accepted(pdweffect)
             } else {
                 DROPEFFECT_NONE
             },
@@ -232,7 +431,7 @@ impl IDropTarget_Impl for ProbeTarget_Impl {
         set_effect(
             pdweffect,
             if accept {
-                DROPEFFECT_COPY
+                accepted(pdweffect)
             } else {
                 DROPEFFECT_NONE
             },
@@ -268,7 +467,7 @@ impl IDropTarget_Impl for ProbeTarget_Impl {
             tracing::warn!("drop diterima tetapi daftar file kosong");
             return Ok(());
         }
-        set_effect(pdweffect, DROPEFFECT_COPY);
+        set_effect(pdweffect, accepted(pdweffect));
         self.shared.set(ProbeState::Dropped);
         tracing::info!(count = paths.len(), "file diterima dari drag lintas perangkat");
         (self.on_drop)(paths);
@@ -477,6 +676,7 @@ fn arm_drag(hwnd: HWND) {
             data,
             label: request.label,
             native: request.native,
+            prepare: request.prepare,
             done: request.done,
         })
     });
@@ -532,7 +732,7 @@ fn run_armed(hwnd: HWND) -> bool {
     let outcome = if cancel.load(Ordering::Acquire) {
         Ok(DragEffect::None)
     } else {
-        drag::run(&armed.data, &armed.label, cancel, armed.native)
+        drag::run(&armed.data, &armed.label, cancel, armed.native, armed.prepare)
     };
     if left_down() {
         release_left();
@@ -675,6 +875,7 @@ fn create_window(shared: &Shared, on_drop: DropHandler) -> Result<HWND, ProbeErr
         shared: shared.clone(),
         hwnd: hwnd.0 as isize,
         on_drop,
+        rejected: Mutex::new(String::new()),
     }
     .into();
     unsafe { RegisterDragDrop(hwnd, &target) }

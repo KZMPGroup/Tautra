@@ -1,21 +1,22 @@
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use tautra_common::hotkey::Hotkey;
 use tautra_proto::kvm::{KvmMessage, MouseButton};
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{
     GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_TIME_CRITICAL,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetCursorPos, GetMessageW, PeekMessageW, PostThreadMessageW, SetCursorPos,
-    SetWindowsHookExW, UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, LLKHF_EXTENDED,
+    SetWindowsHookExW, UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT,
+    KBDLLHOOKSTRUCT_FLAGS, LLKHF_EXTENDED,
     LLKHF_INJECTED, LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL,
     WM_APP, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL,
     WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
@@ -25,6 +26,142 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::cursor;
 use crate::geometry::{Crossing, Edge, Geometry, Located, Side};
 use crate::InputError;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ExternalOutcome {
+    pub swallow: bool,
+    pub remote: bool,
+    pub park: Option<(i32, i32)>,
+    pub place: Option<(i32, i32)>,
+}
+
+enum ExternalEvent {
+    Mouse { msg: u32, x: i32, y: i32, mouse_data: u32 },
+    Key { msg: u32, vk: u32, scan: u32, extended: bool },
+}
+
+struct ExternalBridge {
+    thread_id: u32,
+    tx: Sender<(ExternalEvent, SyncSender<ExternalOutcome>)>,
+}
+
+static EXTERNAL: Mutex<Option<ExternalBridge>> = Mutex::new(None);
+static EXTERNAL_PARK: Mutex<Option<(i32, i32)>> = Mutex::new(None);
+
+thread_local! {
+    static PENDING_PLACE: std::cell::Cell<Option<(i32, i32)>> = const { std::cell::Cell::new(None) };
+}
+
+fn external_park() -> Option<(i32, i32)> {
+    EXTERNAL_PARK.lock().ok().and_then(|p| *p)
+}
+
+fn set_external_park(park: Option<(i32, i32)>) {
+    if let Ok(mut guard) = EXTERNAL_PARK.lock() {
+        *guard = park;
+    }
+}
+
+fn external_fallback(why: &str) -> ExternalOutcome {
+    match external_park() {
+        Some(park) => {
+            tracing::warn!(?park, "{why}, event dari layanan ditelan agar kursor tetap terparkir");
+            ExternalOutcome {
+                swallow: true,
+                remote: true,
+                park: Some(park),
+                place: None,
+            }
+        }
+        None => {
+            tracing::trace!("{why}, mode lokal, event dari layanan diteruskan");
+            ExternalOutcome::default()
+        }
+    }
+}
+
+fn feed(event: ExternalEvent) -> ExternalOutcome {
+    let started = Instant::now();
+    let (thread_id, tx) = match EXTERNAL.lock() {
+        Ok(guard) => match guard.as_ref() {
+            Some(bridge) => (bridge.thread_id, bridge.tx.clone()),
+            None => return external_fallback("hook input agent belum aktif"),
+        },
+        Err(_) => return external_fallback("kunci jembatan hook rusak"),
+    };
+    let (reply_tx, reply_rx) = mpsc::sync_channel(1);
+    if tx.send((event, reply_tx)).is_err() {
+        return external_fallback("antrean ke thread hook tertutup");
+    }
+    if let Err(e) = unsafe { PostThreadMessageW(thread_id, WM_APP, WPARAM(0), LPARAM(0)) } {
+        return external_fallback(&format!("thread hook tidak bisa dibangunkan: {}", e.message()));
+    }
+    match reply_rx.recv_timeout(Duration::from_millis(150)) {
+        Ok(outcome) => {
+            let took = started.elapsed();
+            if took > Duration::from_millis(20) {
+                tracing::warn!(?took, ?outcome, "thread hook lambat memproses event dari layanan");
+            }
+            outcome
+        }
+        Err(_) => external_fallback("thread hook tidak menjawab dalam 150 ms"),
+    }
+}
+
+pub fn feed_external_mouse(msg: u32, x: i32, y: i32, mouse_data: u32) -> ExternalOutcome {
+    feed(ExternalEvent::Mouse { msg, x, y, mouse_data })
+}
+
+pub fn feed_external_key(msg: u32, vk: u32, scan: u32, extended: bool) -> ExternalOutcome {
+    feed(ExternalEvent::Key { msg, vk, scan, extended })
+}
+
+fn process_external(state: &mut State, event: ExternalEvent) -> ExternalOutcome {
+    PENDING_PLACE.set(None);
+    let swallow = match event {
+        ExternalEvent::Mouse { msg, x, y, mouse_data } => {
+            tracing::trace!(msg, x, y, mouse_data, "event mouse dari layanan");
+            let info = MSLLHOOKSTRUCT {
+                pt: POINT { x, y },
+                mouseData: mouse_data,
+                flags: 0,
+                time: 0,
+                dwExtraInfo: 0,
+            };
+            state.on_mouse(msg, &info)
+        }
+        ExternalEvent::Key { msg, vk, scan, extended } => {
+            tracing::trace!(msg, vk, scan, extended, "event keyboard dari layanan");
+            let flags = if extended {
+                LLKHF_EXTENDED
+            } else {
+                KBDLLHOOKSTRUCT_FLAGS(0)
+            };
+            let info = KBDLLHOOKSTRUCT {
+                vkCode: vk,
+                scanCode: scan,
+                flags,
+                time: 0,
+                dwExtraInfo: 0,
+            };
+            state.on_key(msg, &info)
+        }
+    };
+    let outcome = ExternalOutcome {
+        swallow,
+        remote: state.is_remote(),
+        park: match &state.mode {
+            Mode::Remote(remote) => Some(remote.park),
+            Mode::Local => None,
+        },
+        place: PENDING_PLACE.take(),
+    };
+    if let Some(place) = outcome.place {
+        tracing::info!(?place, "posisi kursor diserahkan ke worker layanan");
+    }
+    tracing::trace!(?outcome, "event dari layanan diproses");
+    outcome
+}
 
 const VK_SHIFT: usize = 0x10;
 const VK_CONTROL: usize = 0x11;
@@ -198,8 +335,31 @@ fn set_bit(mask: &mut u8, bit: u8, on: bool) {
 }
 
 fn place_cursor(x: i32, y: i32) {
-    if let Err(e) = unsafe { SetCursorPos(x, y) } {
-        tracing::warn!("posisi kursor gagal diatur: {}", e.message());
+    PENDING_PLACE.set(Some((x, y)));
+    let result = unsafe { SetCursorPos(x, y) };
+    let now = cursor::position();
+    match result {
+        Ok(()) => tracing::trace!(x, y, ?now, "posisi kursor diatur"),
+        Err(e) if now == Some((x, y)) => {
+            tracing::debug!(x, y, "SetCursorPos melapor gagal tetapi kursor sudah di posisi: {}", e.message())
+        }
+        Err(e) => tracing::warn!(
+            x,
+            y,
+            ?now,
+            "posisi kursor gagal diatur dari agent (jendela admin di depan?), worker layanan akan mengatur: {}",
+            e.message()
+        ),
+    }
+}
+
+fn repark(park: (i32, i32)) {
+    let Some(now) = cursor::position() else {
+        return;
+    };
+    if now != park {
+        tracing::debug!(?now, ?park, "kursor fisik bergeser dari parkir, dikembalikan");
+        place_cursor(park.0, park.1);
     }
 }
 
@@ -216,7 +376,17 @@ impl State {
     }
 
     fn report(&self) {
-        self.sink.status(self.status());
+        set_external_park(match &self.mode {
+            Mode::Remote(remote) => Some(remote.park),
+            Mode::Local => None,
+        });
+        let status = self.status();
+        tracing::debug!(?status, "status hook dilaporkan");
+        self.sink.status(status);
+    }
+
+    fn is_remote(&self) -> bool {
+        matches!(self.mode, Mode::Remote(_))
     }
 
     fn effective_gaming(&self) -> bool {
@@ -269,7 +439,10 @@ impl State {
 
     fn hide_cursor(&mut self) {
         match cursor::hide() {
-            Ok(()) => self.cursor_hidden = true,
+            Ok(()) => {
+                tracing::info!("kursor lokal disembunyikan");
+                self.cursor_hidden = true
+            }
             Err(e) => {
                 tracing::warn!("kursor lokal gagal disembunyikan: {e}");
                 self.cursor_hidden = true;
@@ -279,8 +452,9 @@ impl State {
 
     fn show_cursor(&mut self) {
         if self.cursor_hidden {
-            if let Err(e) = cursor::restore() {
-                tracing::error!("kursor lokal gagal dipulihkan: {e}");
+            match cursor::restore() {
+                Ok(()) => tracing::info!("kursor lokal dipulihkan"),
+                Err(e) => tracing::error!("kursor lokal gagal dipulihkan: {e}"),
             }
             self.cursor_hidden = false;
         }
@@ -316,7 +490,14 @@ impl State {
             x: target.x,
             y: target.y,
         });
-        tracing::debug!(x = target.x, y = target.y, "input pindah ke perangkat lain");
+        tracing::info!(
+            x = target.x,
+            y = target.y,
+            screen = target.screen,
+            ?local,
+            cursor = ?cursor::position(),
+            "input pindah ke perangkat lain"
+        );
         self.report();
     }
 
@@ -339,7 +520,12 @@ impl State {
         self.edge_since = None;
         self.drag = DragPhase::None;
         self.local_held = [false; 256];
-        tracing::debug!("input kembali ke perangkat ini");
+        tracing::info!(
+            ?target,
+            notify_peer,
+            cursor = ?cursor::position(),
+            "input kembali ke perangkat ini"
+        );
         self.report();
     }
 
@@ -637,7 +823,11 @@ impl State {
         if dx == 0 && dy == 0 {
             return;
         }
+        if dx.abs() > 400 || dy.abs() > 400 {
+            tracing::warn!(px, py, ?park, dx, dy, "lompatan mouse besar dari titik parkir");
+        }
         let Some(g) = self.usable_geometry() else {
+            tracing::warn!("geometri tidak bisa dipakai, input dikembalikan ke perangkat ini");
             self.return_local(None, true);
             return;
         };
@@ -688,10 +878,12 @@ impl State {
         remote.y = y;
         remote.screen = screen;
         let point = (x.floor() as i32, y.floor() as i32);
+        tracing::trace!(px, py, dx, dy, ?point, screen, ?edge, "gerak mouse jarak jauh");
         if point != remote.sent {
             remote.sent = point;
             self.sink.mouse_move(point.0, point.1);
         }
+        repark(park);
     }
 
     fn apply(&mut self, cmd: Command) -> bool {
@@ -850,7 +1042,15 @@ fn run(init: Init, rx: Receiver<Command>, ready: SyncSender<Result<u32, InputErr
             fs_checked: None,
         });
     });
-    let _ = ready.send(Ok(unsafe { GetCurrentThreadId() }));
+    let thread_id = unsafe { GetCurrentThreadId() };
+    let (ext_tx, ext_rx) = mpsc::channel::<(ExternalEvent, SyncSender<ExternalOutcome>)>();
+    if let Ok(mut guard) = EXTERNAL.lock() {
+        *guard = Some(ExternalBridge {
+            thread_id,
+            tx: ext_tx,
+        });
+    }
+    let _ = ready.send(Ok(thread_id));
     tracing::info!("hook input aktif");
 
     'pump: loop {
@@ -871,8 +1071,20 @@ fn run(init: Init, rx: Receiver<Command>, ready: SyncSender<Result<u32, InputErr
                 break 'pump;
             }
         }
+        while let Ok((event, reply)) = ext_rx.try_recv() {
+            let outcome = STATE.with(|cell| {
+                cell.borrow_mut()
+                    .as_mut()
+                    .map(|state| process_external(state, event))
+                    .unwrap_or_default()
+            });
+            let _ = reply.send(outcome);
+        }
     }
 
+    if let Ok(mut guard) = EXTERNAL.lock() {
+        *guard = None;
+    }
     STATE.with(|cell| {
         if let Some(mut state) = cell.borrow_mut().take() {
             state.shutdown();

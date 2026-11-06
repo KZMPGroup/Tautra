@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react";
 import { AgentOfflineCard } from "../components/AgentOfflineCard";
 import { Button } from "../components/Button";
 import { Card, Detail } from "../components/Card";
@@ -10,7 +11,7 @@ import { fmt, useI18n } from "../i18n";
 import { agentCall, Method, useAction, useAgent, useNow } from "../lib/agent";
 import { describeConnection, TONE_DOT, type Tone } from "../lib/connection";
 import { duration, latency } from "../lib/format";
-import type { AgentStatus, KvmStatus, NetworkStatus } from "../lib/types";
+import type { AgentStatus, KvmStatus, ServiceStatus } from "../lib/types";
 
 export function Home({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const { t } = useI18n();
@@ -23,9 +24,9 @@ export function Home({ onNavigate }: { onNavigate: (page: Page) => void }) {
       <div className="grid gap-4">
         {status ? (
           <>
+            <ServiceAlertCard />
             <ConnectionCard status={status} onNavigate={onNavigate} />
             <KvmCard kvm={status.kvm} onNavigate={onNavigate} />
-            <NetworkCard network={status.network} />
             {status.notices.length > 0 && (
               <Card title={t.home.noticesTitle}>
                 <NoticeList notices={status.notices} />
@@ -119,47 +120,6 @@ function ConnectionCard({ status, onNavigate }: { status: AgentStatus; onNavigat
   );
 }
 
-function NetworkCard({ network }: { network: NetworkStatus }) {
-  const { t } = useI18n();
-  return (
-    <Card title={t.home.networkTitle}>
-      <div className="grid gap-3">
-        {network.networks.length === 0 ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">{t.home.noNetworks}</p>
-        ) : (
-          <ul className="grid gap-2">
-            {network.networks.map((n) => (
-              <li key={`${n.name}-${n.category}`} className="flex items-center gap-3">
-                <Icon name="wifi" className="size-4 text-neutral-500 dark:text-neutral-400" />
-                <span className="min-w-0 flex-1 truncate text-sm text-neutral-900 dark:text-neutral-100">
-                  {n.name || t.common.unknown}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    n.category === "public"
-                      ? "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
-                      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
-                  }`}
-                >
-                  {t.home.category[n.category]}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <dl className="grid grid-cols-2 gap-4 border-t border-black/5 pt-3 dark:border-white/10">
-          <Detail label={t.general.autoConnect}>
-            <span className={network.allowed ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}>
-              {network.allowed ? t.home.networkAllowed : t.home.networkNotAllowed}
-            </span>
-          </Detail>
-          <Detail label={t.home.port}>{network.quic_port || "—"}</Detail>
-        </dl>
-      </div>
-    </Card>
-  );
-}
-
 function KvmCard({ kvm, onNavigate }: { kvm: KvmStatus; onNavigate: (page: Page) => void }) {
   const { t } = useI18n();
   const peer = kvm.layout?.devices.find((d) => !d.is_local)?.device_name ?? t.common.unknown;
@@ -208,6 +168,56 @@ function KvmCard({ kvm, onNavigate }: { kvm: KvmStatus; onNavigate: (page: Page)
           )}
         </div>
       )}
+    </Card>
+  );
+}
+
+function ServiceAlertCard() {
+  const { t } = useI18n();
+  const action = useAction();
+  const [svc, setSvc] = useState<ServiceStatus | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setSvc(await agentCall<ServiceStatus>(Method.ServiceStatus));
+    } catch {
+      setSvc(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const id = window.setInterval(() => void refresh(), 10_000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  if (!svc || (svc.installed && svc.running)) return null;
+
+  const label = svc.installed ? t.input.serviceStateStopped : t.input.serviceStateMissing;
+
+  return (
+    <Card
+      title={t.input.serviceTitle}
+      actions={
+        <Button
+          variant="primary"
+          icon="download"
+          busy={action.busy}
+          onClick={() => void action.run(async () => setSvc(await agentCall<ServiceStatus>(Method.ServiceInstall)))}
+        >
+          {t.input.serviceInstall}
+        </Button>
+      }
+    >
+      <div className="grid gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+          <span className="size-2 rounded-full bg-amber-500" aria-hidden />
+          {label}
+        </div>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">{t.input.serviceIntro}</p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">{t.input.serviceAdminNote}</p>
+        {action.error && <ErrorMessage error={action.error} onDismiss={action.clear} />}
+      </div>
     </Card>
   );
 }

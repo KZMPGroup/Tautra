@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
+use std::os::windows::ffi::OsStrExt;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -15,7 +17,7 @@ use windows::Win32::System::Com::{
     IStream, DATADIR_GET, DVASPECT_CONTENT, FORMATETC, STGMEDIUM, STGMEDIUM_0, TYMED_HGLOBAL,
     TYMED_ISTREAM,
 };
-use windows::Win32::System::Ole::{ReleaseStgMedium, CF_DIB, CF_UNICODETEXT};
+use windows::Win32::System::Ole::{ReleaseStgMedium, CF_DIB, CF_HDROP, CF_UNICODETEXT};
 use windows::Win32::UI::Shell::{
     FD_ATTRIBUTES, FD_FILESIZE, FD_PROGRESSUI, FD_UNICODE, FD_WRITESTIME, FILEDESCRIPTORW,
 };
@@ -25,6 +27,7 @@ use crate::global;
 use crate::service::{ClipboardHandler, RemoteContent};
 use crate::stream::RemoteStream;
 use crate::png_to_dib;
+use crate::target::shell_target;
 
 const DROPEFFECT_COPY: u32 = 1;
 const MAX_STORED_BYTES: u64 = 16 * 1024 * 1024;
@@ -37,6 +40,27 @@ enum Source {
     Contents,
     DropEffect,
     Dword(u32),
+    Hdrop,
+}
+
+pub trait DropFiles: Send + Sync + 'static {
+    fn paths(&self) -> Result<Vec<PathBuf>, String>;
+    fn dropped_on_shell(&self) -> Option<bool>;
+}
+
+fn dropfiles(paths: &[PathBuf]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for value in [20i32, 0, 0, 0, 1] {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    for path in paths {
+        for unit in path.as_os_str().encode_wide() {
+            out.extend_from_slice(&unit.to_le_bytes());
+        }
+        out.extend_from_slice(&[0, 0]);
+    }
+    out.extend_from_slice(&[0, 0]);
+    out
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -87,11 +111,20 @@ pub struct RemoteData {
     cache: Mutex<HashMap<ClipFormat, Arc<Vec<u8>>>>,
     dib: Mutex<Option<Arc<Vec<u8>>>>,
     files: Option<FileTable>,
+    drop_files: Option<Arc<dyn DropFiles>>,
     stored: Mutex<Vec<(u16, Vec<u8>)>>,
 }
 
 pub fn create_data_object(content: RemoteContent, handler: Arc<dyn ClipboardHandler>) -> IDataObject {
     RemoteData::new(content, handler).into()
+}
+
+pub fn create_drag_object(
+    content: RemoteContent,
+    handler: Arc<dyn ClipboardHandler>,
+    files: Arc<dyn DropFiles>,
+) -> IDataObject {
+    RemoteData::with_files(content, handler, Some(files)).into()
 }
 
 pub fn read_dword(data: &IDataObject, format: u16) -> Option<u32> {
@@ -115,6 +148,14 @@ pub fn read_dword(data: &IDataObject, format: u16) -> Option<u32> {
 
 impl RemoteData {
     pub fn new(content: RemoteContent, handler: Arc<dyn ClipboardHandler>) -> Self {
+        Self::with_files(content, handler, None)
+    }
+
+    fn with_files(
+        content: RemoteContent,
+        handler: Arc<dyn ClipboardHandler>,
+        drop_files: Option<Arc<dyn DropFiles>>,
+    ) -> Self {
         let f = formats();
         let mut offered = Vec::new();
         let mut cache = HashMap::new();
@@ -140,6 +181,10 @@ impl RemoteData {
                 map,
             })
         });
+        let drop_files = drop_files.filter(|_| files.is_some());
+        if drop_files.is_some() {
+            offered.push(hglobal(CF_HDROP.0, Source::Hdrop));
+        }
         if files.is_some() {
             lazy = true;
             offered.push(hglobal(f.group_descriptor, Source::Descriptor));
@@ -186,6 +231,7 @@ impl RemoteData {
             cache: Mutex::new(cache),
             dib: Mutex::new(None),
             files,
+            drop_files,
             stored: Mutex::new(Vec::new()),
         }
     }
@@ -205,8 +251,24 @@ impl RemoteData {
     fn find(&self, format: &FORMATETC) -> Option<Offered> {
         self.offered
             .iter()
-            .find(|o| o.format == format.cfFormat && format.tymed & o.tymed != 0)
+            .find(|o| {
+                o.format == format.cfFormat
+                    && format.tymed & o.tymed != 0
+                    && self.visible(o.source, shell_target)
+            })
             .copied()
+    }
+
+    fn visible(&self, source: Source, shell: impl FnOnce() -> bool) -> bool {
+        let Some(files) = self.drop_files.as_ref() else {
+            return true;
+        };
+        let shell = || files.dropped_on_shell().unwrap_or_else(shell);
+        match source {
+            Source::Hdrop => !shell(),
+            Source::Descriptor | Source::Contents => shell(),
+            _ => true,
+        }
     }
 
     fn fail(&self, message: String) -> Error {
@@ -312,6 +374,15 @@ impl RemoteData {
                 None => return Err(DV_E_FORMATETC.into()),
             },
             Source::DropEffect => DROPEFFECT_COPY.to_le_bytes().to_vec(),
+            Source::Hdrop => match &self.drop_files {
+                Some(files) => {
+                    let paths = files
+                        .paths()
+                        .map_err(|e| self.fail(format!("File dari perangkat lain gagal disiapkan: {e}")))?;
+                    dropfiles(&paths)
+                }
+                None => return Err(DV_E_FORMATETC.into()),
+            },
             Source::Dword(value) => value.to_le_bytes().to_vec(),
             Source::Contents => return Err(DV_E_FORMATETC.into()),
         })
@@ -434,9 +505,14 @@ impl IDataObject_Impl for RemoteData_Impl {
             .map(|(f, _)| *f)
             .filter(|f| !self.offered.iter().any(|o| o.format == *f))
             .collect();
+        let shell = self
+            .drop_files
+            .as_ref()
+            .is_some_and(|files| files.dropped_on_shell().unwrap_or_else(shell_target));
         let list = self
             .offered
             .iter()
+            .filter(|o| self.visible(o.source, || shell))
             .map(|o| (o.format, o.tymed))
             .chain(stored.into_iter().map(|f| (f, TYMED_HGLOBAL.0 as u32)))
             .map(|(format, tymed)| FORMATETC {

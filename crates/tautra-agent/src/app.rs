@@ -218,6 +218,7 @@ pub async fn run(logon: bool) -> anyhow::Result<()> {
     }
 
     if !logon {
+        crate::service::serve_input_assist();
         if let Err(e) = sync_autostart(config.general.autostart) {
             tracing::error!("auto-start gagal diatur: {e}");
             notices.push(NoticeLevel::Error, app_error::AUTOSTART_FAILED, e);

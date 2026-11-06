@@ -1,6 +1,7 @@
 mod book;
 mod clip;
 mod net;
+mod stage;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -21,7 +22,7 @@ use tautra_net::SessionHandle;
 use tautra_proto::kvm::KvmMessage;
 use tautra_proto::share::{ClipFormat, DropEffect, FileOffer, ShareMessage};
 use tautra_transfer::{
-    DragEffect, DragLabel, DragOutcome, DragRequest, DropProbe, Manifest, ProbeState,
+    DragEffect, DragLabel, DragOutcome, DragRequest, DropProbe, Manifest, Prepare, ProbeState,
 };
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch, Notify};
@@ -451,12 +452,23 @@ impl Share {
         };
         let weak = Arc::downgrade(agent);
         let runtime = self.runtime.clone();
+        let stage = stage::DropStage::new(agent, self.runtime.clone(), offer.id, &offer.entries);
+        let prepare = stage.clone().map(|stage| {
+            let prepare: Prepare = Arc::new(move || stage.fill());
+            prepare
+        });
         tracing::info!(offer = offer.id, "drag file dari perangkat lain dimulai di sini");
         self.state().incoming_drag = Some(offer.id);
         probe.start_drag(DragRequest {
-            data: Box::new(move || Ok(tautra_clipboard::create_data_object(content, handler))),
+            data: Box::new(move || {
+                Ok(match stage {
+                    Some(stage) => tautra_clipboard::create_drag_object(content, handler, stage),
+                    None => tautra_clipboard::create_data_object(content, handler),
+                })
+            }),
             label,
             native: false,
+            prepare,
             done: Box::new(move |outcome| {
                 if let Some(agent) = weak.upgrade() {
                     runtime.spawn(async move { agent.share.drag_finished(&agent, offer, outcome) });
@@ -506,6 +518,7 @@ impl Share {
             data: Box::new(move || tautra_transfer::shell_data(&sources)),
             label: DragLabel { name, dir },
             native: true,
+            prepare: None,
             done: Box::new(move |outcome| {
                 if let (DragOutcome::Failed(reason), Some(agent)) = (outcome, weak.upgrade()) {
                     agent.notice(

@@ -12,6 +12,9 @@ repository.workspace = true
 name = "tautra-agent"
 path = "src/main.rs"
 
+[features]
+devlog = ["tautra-common/devlog"]
+
 [dependencies]
 tautra-common.workspace = true
 tautra-ipc.workspace = true
