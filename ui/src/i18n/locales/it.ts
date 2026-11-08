@@ -79,6 +79,10 @@ const strings: Strings = {
     kvmLocked: "Cursore bloccato",
     kvmGaming: "Gaming Mode",
     kvmEditLayout: "Modifica disposizione",
+    animSuggestTitle: "Provare l’animazione di passaggio?",
+    animSuggestBody: "Mostra una piccola animazione discreta sul bordo dello schermo dove il cursore lascia questo dispositivo o arriva da un altro. L’impostazione vale anche per il dispositivo collegato. Puoi cambiarlo in seguito nella pagina {page}.",
+    animEnable: "Attiva",
+    animDismiss: "No, grazie",
   },
   layout: {
     title: "Disposizione schermi",
@@ -115,6 +119,16 @@ const strings: Strings = {
     gaming: "Gaming Mode",
     gamingHint: "Il cursore torna al dispositivo di input e resta bloccato lì, utile mentre giochi.",
     gamingAuto: "Attiva automaticamente nei giochi a schermo intero",
+    crossingAnimation: "Animazione di passaggio",
+    crossingAnimationHint: "Mostra una piccola animazione discreta sul bordo dello schermo dove il cursore esce o arriva. Vale anche per il dispositivo collegato.",
+    crossingStyle: "Stile animazione",
+    crossingStyleDefault: "(predefinito)",
+    crossingStyleStreak: "Scia di luce",
+    crossingStyleStreakHint: "Una sottile scia di luce schizza fuori e scorre dentro.",
+    crossingStyleRipple: "Onda d’acqua",
+    crossingStyleRippleHint: "Anelli morbidi si restringono in uscita e si allargano in entrata.",
+    crossingStyleGlow: "Scorri e bagliore",
+    crossingStyleGlowHint: "Un bagliore morbido scivola fuori dal bordo e poi rientra.",
     gamingAutoHint:
       "Mentre un'app a schermo intero è attiva, il cursore è bloccato e non può passare all'altro dispositivo. Si disattiva quando esci dallo schermo intero.",
     gamingWarning:

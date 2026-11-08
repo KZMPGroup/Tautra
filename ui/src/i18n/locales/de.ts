@@ -82,6 +82,10 @@ const strings: Strings = {
     kvmLocked: "Mauszeiger gesperrt",
     kvmGaming: "Gaming Mode",
     kvmEditLayout: "Anordnung bearbeiten",
+    animSuggestTitle: "Übergangsanimation ausprobieren?",
+    animSuggestBody: "Zeigt eine kleine, dezente Animation am Bildschirmrand, wo der Cursor dieses Gerät verlässt oder von einem anderen ankommt. Die Einstellung gilt auch für das verbundene Gerät. Du kannst das später auf der Seite {page} ändern.",
+    animEnable: "Einschalten",
+    animDismiss: "Nein, danke",
   },
   layout: {
     title: "Bildschirmanordnung",
@@ -119,6 +123,16 @@ const strings: Strings = {
     gaming: "Gaming Mode",
     gamingHint: "Der Mauszeiger kehrt zum Eingabegerät zurück und bleibt dort gesperrt, praktisch beim Spielen.",
     gamingAuto: "Bei Vollbildspielen automatisch einschalten",
+    crossingAnimation: "Übergangsanimation",
+    crossingAnimationHint: "Zeigt eine kleine, dezente Animation am Bildschirmrand, wo der Cursor das Gerät verlässt oder ankommt. Gilt auch für das verbundene Gerät.",
+    crossingStyle: "Animationsstil",
+    crossingStyleDefault: "(Standard)",
+    crossingStyleStreak: "Lichtstreifen",
+    crossingStyleStreakHint: "Ein feiner Lichtstreifen schießt hinaus und fließt herein.",
+    crossingStyleRipple: "Wasserwelle",
+    crossingStyleRippleHint: "Weiche Ringe ziehen sich beim Verlassen zusammen und breiten sich beim Ankommen aus.",
+    crossingStyleGlow: "Gleiten & Leuchten",
+    crossingStyleGlowHint: "Ein sanftes Leuchten gleitet aus dem Rand hinaus und wieder herein.",
     gamingAutoHint:
       "Solange eine Vollbild-App aktiv ist, wird der Mauszeiger gesperrt und kann nicht zum anderen Gerät wechseln. Beim Verlassen des Vollbilds schaltet es sich wieder aus.",
     gamingWarning:

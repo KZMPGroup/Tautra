@@ -5,7 +5,7 @@ pub mod pairing;
 pub mod share;
 pub mod update;
 
-pub const PROTOCOL_VERSION: u32 = 10;
+pub const PROTOCOL_VERSION: u32 = 11;
 
 pub const ALPN_SESSION: &[u8] = b"tautra";
 pub const ALPN_PAIRING: &[u8] = b"tautra-pair";

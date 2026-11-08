@@ -99,6 +99,7 @@ struct Ctx {
     guide: Option<GuideOverlay>,
     guide_until: Option<Instant>,
     guide_failed: bool,
+    prefs_sent: Option<(bool, u8)>,
 }
 
 async fn wait_until(deadline: Option<tokio::time::Instant>) {
@@ -210,6 +211,7 @@ pub async fn run(
         guide: None,
         guide_until: None,
         guide_failed: false,
+        prefs_sent: None,
     };
     ctx.injector.set_fallback(crate::service::fallback());
     ctx.local_displays = ctx.read_displays().unwrap_or_default();
@@ -218,6 +220,7 @@ pub async fn run(
         layout: agent.kvm.stored_layout(ctx.peer_id),
         portable: ctx.portable,
     });
+    ctx.send_prefs(false);
     ctx.publish();
     tracing::info!(peer = %ctx.peer_id, "KVM menunggu data layar dari perangkat lain");
 
@@ -595,7 +598,7 @@ impl Ctx {
                     self.refresh();
                 }
             }
-            KvmMessage::Enter { x, y } => {
+            KvmMessage::Enter { x, y, edge } => {
                 if self.is_host() {
                     return;
                 }
@@ -606,6 +609,7 @@ impl Ctx {
                     y,
                     cursor = ?tautra_input::cursor::position(),
                     hider = self.hider.is_some(),
+                    ?edge,
                     "perangkat ini mulai dikendalikan"
                 );
                 self.hider = None;
@@ -616,11 +620,24 @@ impl Ctx {
                 let result = self.injector.move_to(x, y);
                 self.injected(result);
                 tracing::info!(cursor = ?tautra_input::cursor::position(), "kursor diletakkan di titik masuk");
+                let input = self.agent.config().input;
+                if input.crossing_animation {
+                    tautra_input::crossing::play(
+                        x,
+                        y,
+                        tautra_input::crossing::CrossKind::Enter,
+                        edge.map(Into::into),
+                        input.crossing_style,
+                    );
+                }
                 self.publish();
             }
-            KvmMessage::Leave => {
+            KvmMessage::Leave { x, y, edge } => {
                 tracing::info!(
                     controlled = self.controlled,
+                    x,
+                    y,
+                    ?edge,
                     cursor = ?tautra_input::cursor::position(),
                     "kursor meninggalkan perangkat ini"
                 );
@@ -630,6 +647,16 @@ impl Ctx {
                 self.injector.release_all();
                 if self.controlled {
                     self.controlled = false;
+                    let input = self.agent.config().input;
+                    if input.crossing_animation {
+                        tautra_input::crossing::play(
+                            x,
+                            y,
+                            tautra_input::crossing::CrossKind::Exit,
+                            edge.map(Into::into),
+                            input.crossing_style,
+                        );
+                    }
                     self.hide_idle_cursor();
                     self.publish();
                 }
@@ -681,6 +708,11 @@ impl Ctx {
             KvmMessage::DragFiles(offer) => self.queue_drag(PendingKind::Offer(offer)),
             KvmMessage::DragReturn { offer_id } => self.queue_drag(PendingKind::Return(offer_id)),
             KvmMessage::LayoutGuide(positions) => self.show_guide(positions.as_deref()),
+            KvmMessage::Prefs {
+                crossing_animation,
+                crossing_style,
+                changed,
+            } => self.apply_peer_prefs(crossing_animation, crossing_style, changed),
         }
     }
 
@@ -907,6 +939,9 @@ impl Ctx {
                 if let Some(hook) = &self.hook {
                     hook.set_options(options);
                 }
+                if self.prefs_sent != Some((options.crossing_animation, options.crossing_style.code())) {
+                    self.send_prefs(true);
+                }
             }
             SessionCmd::Locked(on) => {
                 if let Some(hook) = &self.hook {
@@ -1005,6 +1040,65 @@ impl Ctx {
         } else if self.hook.is_none() && self.is_host() && self.peer.is_some() {
             self.refresh();
         }
+    }
+
+    fn send_prefs(&mut self, changed: bool) {
+        let input = self.agent.config().input;
+        let crossing_animation = input.crossing_animation;
+        let crossing_style = input.crossing_style.code();
+        self.prefs_sent = Some((crossing_animation, crossing_style));
+        tracing::info!(
+            crossing_animation,
+            crossing_style,
+            changed,
+            "setelan bersama dikirim ke perangkat lain"
+        );
+        self.send(KvmMessage::Prefs {
+            crossing_animation,
+            crossing_style,
+            changed,
+        });
+    }
+
+    fn apply_peer_prefs(&mut self, crossing_animation: bool, crossing_style: u8, changed: bool) {
+        let current = self.agent.config();
+        let style = tautra_common::config::CrossingStyle::from_code(crossing_style);
+        tracing::info!(
+            crossing_animation,
+            crossing_style,
+            changed,
+            local = current.input.crossing_animation,
+            local_style = ?current.input.crossing_style,
+            "setelan bersama diterima dari perangkat lain"
+        );
+        if style.is_none() {
+            tracing::warn!(crossing_style, "gaya animasi dari perangkat lain tidak dikenal, diabaikan");
+        }
+        let style = style.unwrap_or(current.input.crossing_style);
+        let same = current.input.crossing_animation == crossing_animation && current.input.crossing_style == style;
+        if same || (!changed && !crossing_animation) {
+            return;
+        }
+        let (crossing_animation, style) = if changed || !current.input.crossing_animation {
+            (crossing_animation, style)
+        } else {
+            (current.input.crossing_animation, current.input.crossing_style)
+        };
+        if current.input.crossing_animation == crossing_animation && current.input.crossing_style == style {
+            return;
+        }
+        self.prefs_sent = Some((crossing_animation, style.code()));
+        let agent = self.agent.clone();
+        tokio::spawn(async move {
+            let mut next = agent.config();
+            next.input.crossing_animation = crossing_animation;
+            next.input.crossing_style = style;
+            next.input.crossing_animation_asked = true;
+            match agent.set_config(next).await {
+                Ok(_) => tracing::info!(crossing_animation, ?style, "animasi perpindahan disamakan dengan perangkat lain"),
+                Err(e) => tracing::warn!("setelan animasi dari perangkat lain gagal disimpan: {e}"),
+            }
+        });
     }
 
     fn hide_idle_cursor(&mut self) {

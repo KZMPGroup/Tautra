@@ -81,6 +81,10 @@ const strings: Strings = {
     kvmLocked: "Curseur verrouillé",
     kvmGaming: "Gaming Mode",
     kvmEditLayout: "Modifier la disposition",
+    animSuggestTitle: "Essayer l’animation de passage ?",
+    animSuggestBody: "Affiche une petite animation discrète au bord de l’écran, là où le curseur quitte cet appareil ou arrive d’un autre. Le réglage s’applique aussi à l’appareil connecté. Vous pourrez changer cela plus tard dans la page {page}.",
+    animEnable: "Activer",
+    animDismiss: "Non merci",
   },
   layout: {
     title: "Disposition des écrans",
@@ -117,6 +121,16 @@ const strings: Strings = {
     gaming: "Gaming Mode",
     gamingHint: "Le curseur revient sur l'appareil de saisie et y reste verrouillé, pratique pour jouer.",
     gamingAuto: "Activer automatiquement pour les jeux en plein écran",
+    crossingAnimation: "Animation de passage",
+    crossingAnimationHint: "Affiche une petite animation discrète au bord de l’écran, là où le curseur part ou arrive. S’applique aussi à l’appareil connecté.",
+    crossingStyle: "Style d’animation",
+    crossingStyleDefault: "(par défaut)",
+    crossingStyleStreak: "Trait de lumière",
+    crossingStyleStreakHint: "Un fin trait de lumière jaillit vers l’extérieur et entre en glissant.",
+    crossingStyleRipple: "Onde d’eau",
+    crossingStyleRippleHint: "Des anneaux doux se resserrent à la sortie et s’étendent à l’entrée.",
+    crossingStyleGlow: "Glisse et lueur",
+    crossingStyleGlowHint: "Une lueur douce glisse hors du bord puis revient.",
     gamingAutoHint:
       "Tant qu'une application en plein écran est active, le curseur est verrouillé et ne peut pas passer à l'autre appareil. Il se désactive à la sortie du plein écran.",
     gamingWarning:

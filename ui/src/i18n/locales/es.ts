@@ -79,6 +79,10 @@ const strings: Strings = {
     kvmLocked: "Cursor bloqueado",
     kvmGaming: "Gaming Mode",
     kvmEditLayout: "Editar disposición",
+    animSuggestTitle: "¿Probar la animación de cruce?",
+    animSuggestBody: "Muestra una animación pequeña y sutil en el borde de la pantalla por donde el cursor sale de este dispositivo o llega de otro. El ajuste también se aplica al dispositivo conectado. Puedes cambiarlo luego en la página {page}.",
+    animEnable: "Activar",
+    animDismiss: "No, gracias",
   },
   layout: {
     title: "Disposición de pantallas",
@@ -115,6 +119,16 @@ const strings: Strings = {
     gaming: "Gaming Mode",
     gamingHint: "El cursor vuelve al dispositivo de entrada y queda bloqueado allí, útil al jugar.",
     gamingAuto: "Activar automáticamente en juegos a pantalla completa",
+    crossingAnimation: "Animación de cruce",
+    crossingAnimationHint: "Muestra una animación pequeña y sutil en el borde de la pantalla por donde el cursor sale o llega. También se aplica al dispositivo conectado.",
+    crossingStyle: "Estilo de animación",
+    crossingStyleDefault: "(predeterminado)",
+    crossingStyleStreak: "Destello de luz",
+    crossingStyleStreakHint: "Una fina línea de luz sale disparada y entra fluyendo.",
+    crossingStyleRipple: "Onda de agua",
+    crossingStyleRippleHint: "Anillos suaves se encogen al salir y se expanden al entrar.",
+    crossingStyleGlow: "Deslizar y brillar",
+    crossingStyleGlowHint: "Un brillo suave se desliza fuera del borde y vuelve a entrar.",
     gamingAutoHint:
       "Mientras una aplicación a pantalla completa está activa, el cursor se bloquea para que no pase al otro dispositivo. Se desactiva de nuevo al salir de la pantalla completa.",
     gamingWarning:

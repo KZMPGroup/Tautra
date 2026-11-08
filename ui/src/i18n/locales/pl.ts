@@ -78,6 +78,10 @@ const strings: Strings = {
     kvmLocked: "Kursor zablokowany",
     kvmGaming: "Gaming Mode",
     kvmEditLayout: "Edytuj układ",
+    animSuggestTitle: "Wypróbować animację przejścia?",
+    animSuggestBody: "Pokazuje małą, subtelną animację przy krawędzi ekranu, gdzie kursor opuszcza to urządzenie lub przychodzi z innego. Ustawienie obowiązuje też na połączonym urządzeniu. Możesz to zmienić później na stronie {page}.",
+    animEnable: "Włącz",
+    animDismiss: "Nie, dziękuję",
   },
   layout: {
     title: "Rozmieszczenie ekranów",
@@ -113,6 +117,16 @@ const strings: Strings = {
     gaming: "Gaming Mode",
     gamingHint: "Kursor wraca do urządzenia wejściowego i zostaje tam zablokowany, przydatne podczas gry.",
     gamingAuto: "Włączaj automatycznie w grach pełnoekranowych",
+    crossingAnimation: "Animacja przejścia",
+    crossingAnimationHint: "Pokazuje małą, subtelną animację przy krawędzi ekranu, gdzie kursor wychodzi lub wchodzi. Obowiązuje też na połączonym urządzeniu.",
+    crossingStyle: "Styl animacji",
+    crossingStyleDefault: "(domyślny)",
+    crossingStyleStreak: "Smuga światła",
+    crossingStyleStreakHint: "Cienka smuga światła wystrzeliwuje na zewnątrz i wpływa do środka.",
+    crossingStyleRipple: "Fala wody",
+    crossingStyleRippleHint: "Miękkie pierścienie kurczą się przy wyjściu i rozchodzą przy wejściu.",
+    crossingStyleGlow: "Przesunięcie i blask",
+    crossingStyleGlowHint: "Miękki blask wysuwa się z krawędzi i wraca.",
     gamingAutoHint:
       "Gdy aktywna jest aplikacja pełnoekranowa, kursor jest zablokowany i nie może przejść na drugie urządzenie. Wyłącza się po wyjściu z trybu pełnoekranowego.",
     gamingWarning:

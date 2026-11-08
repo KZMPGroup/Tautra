@@ -79,6 +79,10 @@ const strings: Strings = {
     kvmLocked: "Cursor bloqueado",
     kvmGaming: "Gaming Mode",
     kvmEditLayout: "Editar disposição",
+    animSuggestTitle: "Experimentar a animação de passagem?",
+    animSuggestBody: "Mostra uma animação pequena e sutil na borda da tela por onde o cursor sai deste dispositivo ou chega de outro. A configuração vale também para o dispositivo conectado. Você pode mudar isso depois na página {page}.",
+    animEnable: "Ativar",
+    animDismiss: "Não, obrigado",
   },
   layout: {
     title: "Organização das telas",
@@ -115,6 +119,16 @@ const strings: Strings = {
     gaming: "Gaming Mode",
     gamingHint: "O cursor volta ao dispositivo de entrada e fica bloqueado lá, útil para jogar.",
     gamingAuto: "Ativar automaticamente em jogos em tela cheia",
+    crossingAnimation: "Animação de passagem",
+    crossingAnimationHint: "Mostra uma animação pequena e sutil na borda da tela por onde o cursor sai ou chega. Vale também para o dispositivo conectado.",
+    crossingStyle: "Estilo da animação",
+    crossingStyleDefault: "(padrão)",
+    crossingStyleStreak: "Rastro de luz",
+    crossingStyleStreakHint: "Um fino rastro de luz dispara para fora e flui para dentro.",
+    crossingStyleRipple: "Onda de água",
+    crossingStyleRippleHint: "Anéis suaves se contraem ao sair e se espalham ao entrar.",
+    crossingStyleGlow: "Deslizar e brilho",
+    crossingStyleGlowHint: "Um brilho suave desliza para fora da borda e volta.",
     gamingAutoHint:
       "Enquanto um app em tela cheia está ativo, o cursor fica bloqueado e não passa para o outro dispositivo. Desliga de novo ao sair da tela cheia.",
     gamingWarning:

@@ -227,6 +227,8 @@ pub struct HookOptions {
     pub edge_delay: Duration,
     pub hotkeys: Hotkeys,
     pub gaming_auto: bool,
+    pub crossing_animation: bool,
+    pub crossing_style: tautra_common::config::CrossingStyle,
 }
 
 enum Command {
@@ -471,8 +473,15 @@ impl State {
             .or_else(|| g.local.screens.first())
             .map(|s| s.phys.center())
             .unwrap_or((0, 0));
+        let exit = cursor::position();
+        let exit_edge = target.edge.map(Edge::opposite);
         place_cursor(local.0, local.1);
         self.hide_cursor();
+        if self.options.crossing_animation {
+            if let Some((ex, ey)) = exit {
+                crate::crossing::play(ex, ey, crate::crossing::CrossKind::Exit, exit_edge, self.options.crossing_style);
+            }
+        }
         self.local_held = self.keys_down;
         self.remote_buttons = 0;
         self.local_buttons = 0;
@@ -489,6 +498,7 @@ impl State {
         self.sink.message(KvmMessage::Enter {
             x: target.x,
             y: target.y,
+            edge: target.edge.map(Into::into),
         });
         tracing::info!(
             x = target.x,
@@ -506,13 +516,26 @@ impl State {
             return;
         };
         if notify_peer {
-            self.sink.message(KvmMessage::Leave);
+            self.sink.message(KvmMessage::Leave {
+                x: remote.sent.0,
+                y: remote.sent.1,
+                edge: target.as_ref().and_then(|c| c.edge).map(|e| e.opposite().into()),
+            });
         }
         self.show_cursor();
         match target {
             Some(c) => {
                 self.local_screen = c.screen;
                 place_cursor(c.x, c.y);
+                if self.options.crossing_animation {
+                    crate::crossing::play(
+                        c.x,
+                        c.y,
+                        crate::crossing::CrossKind::Enter,
+                        c.edge,
+                        self.options.crossing_style,
+                    );
+                }
             }
             None => place_cursor(remote.park.0, remote.park.1),
         }
@@ -546,7 +569,7 @@ impl State {
                 self.local_screen = i;
             }
         }
-        self.enter_remote(Crossing { screen, x, y });
+        self.enter_remote(Crossing { screen, x, y, edge: None });
     }
 
     fn run_action(&mut self, action: Action) {

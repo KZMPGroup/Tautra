@@ -1,4 +1,4 @@
-use tautra_proto::kvm::DisplaySet;
+use tautra_proto::kvm::{CrossEdge, DisplaySet};
 
 pub const ADJACENT_TOLERANCE: f64 = 2.0;
 pub const ENTRY_INSET: i32 = 2;
@@ -29,6 +29,37 @@ pub enum Edge {
 impl Edge {
     pub(crate) fn horizontal(self) -> bool {
         matches!(self, Edge::Left | Edge::Right)
+    }
+
+    pub fn opposite(self) -> Edge {
+        match self {
+            Edge::Left => Edge::Right,
+            Edge::Right => Edge::Left,
+            Edge::Top => Edge::Bottom,
+            Edge::Bottom => Edge::Top,
+        }
+    }
+}
+
+impl From<Edge> for CrossEdge {
+    fn from(e: Edge) -> Self {
+        match e {
+            Edge::Left => CrossEdge::Left,
+            Edge::Right => CrossEdge::Right,
+            Edge::Top => CrossEdge::Top,
+            Edge::Bottom => CrossEdge::Bottom,
+        }
+    }
+}
+
+impl From<CrossEdge> for Edge {
+    fn from(e: CrossEdge) -> Self {
+        match e {
+            CrossEdge::Left => Edge::Left,
+            CrossEdge::Right => Edge::Right,
+            CrossEdge::Top => Edge::Top,
+            CrossEdge::Bottom => Edge::Bottom,
+        }
     }
 }
 
@@ -216,6 +247,7 @@ pub struct Crossing {
     pub screen: usize,
     pub x: i32,
     pub y: i32,
+    pub edge: Option<Edge>,
 }
 
 pub(crate) fn span(r: &RectF, horizontal_edge: bool) -> (f64, f64) {
@@ -332,6 +364,7 @@ impl Geometry {
             screen: target,
             x: px.clamp(r.left, r.right - 1),
             y: py.clamp(r.top, r.bottom - 1),
+            edge: Some(edge.opposite()),
         })
     }
 }

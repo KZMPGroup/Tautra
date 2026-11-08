@@ -18,7 +18,12 @@ export interface InputConfig {
   hotkey_lock: string;
   hotkey_gaming: string;
   gaming_auto: boolean;
+  crossing_animation: boolean;
+  crossing_animation_asked: boolean;
+  crossing_style: CrossingStyle;
 }
+
+export type CrossingStyle = "ripple" | "glow" | "streak";
 
 export interface ServiceStatus {
   installed: boolean;

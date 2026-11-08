@@ -79,6 +79,10 @@ const strings: Strings = {
     kvmLocked: "Cursor vergrendeld",
     kvmGaming: "Gaming Mode",
     kvmEditLayout: "Indeling bewerken",
+    animSuggestTitle: "Overgangsanimatie proberen?",
+    animSuggestBody: "Toont een kleine, subtiele animatie aan de schermrand waar de cursor dit apparaat verlaat of van een ander apparaat binnenkomt. De instelling geldt ook voor het verbonden apparaat. Je kunt dit later wijzigen op de pagina {page}.",
+    animEnable: "Inschakelen",
+    animDismiss: "Nee, bedankt",
   },
   layout: {
     title: "Schermopstelling",
@@ -115,6 +119,16 @@ const strings: Strings = {
     gaming: "Gaming Mode",
     gamingHint: "De cursor gaat terug naar het invoerapparaat en blijft daar vergrendeld, handig tijdens het gamen.",
     gamingAuto: "Automatisch inschakelen bij games op volledig scherm",
+    crossingAnimation: "Overgangsanimatie",
+    crossingAnimationHint: "Toont een kleine, subtiele animatie aan de schermrand waar de cursor vertrekt of binnenkomt. Geldt ook voor het verbonden apparaat.",
+    crossingStyle: "Animatiestijl",
+    crossingStyleDefault: "(standaard)",
+    crossingStyleStreak: "Lichtstreep",
+    crossingStyleStreakHint: "Een dunne lichtstreep schiet naar buiten en stroomt naar binnen.",
+    crossingStyleRipple: "Waterrimpeling",
+    crossingStyleRippleHint: "Zachte ringen krimpen bij vertrek en spreiden zich bij aankomst.",
+    crossingStyleGlow: "Schuiven & gloed",
+    crossingStyleGlowHint: "Een zachte gloed schuift uit de rand en weer terug.",
     gamingAutoHint:
       "Zolang een app op volledig scherm actief is, wordt de cursor vergrendeld en kan hij niet naar het andere apparaat. Hij gaat weer uit zodra je het volledige scherm verlaat.",
     gamingWarning:

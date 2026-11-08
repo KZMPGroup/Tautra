@@ -9,7 +9,7 @@ import { fmt, useI18n } from "../i18n";
 import { agentCall, Method, useAction, useAgent } from "../lib/agent";
 import { useConfigSaver } from "../lib/config";
 import { hotkeyFromEvent, MAX_EDGE_DELAY_MS, parseEdgeDelay, sameHotkey } from "../lib/hotkey";
-import type { Config, InputConfig, KvmStatus, ServiceStatus } from "../lib/types";
+import type { Config, CrossingStyle, InputConfig, KvmStatus, ServiceStatus } from "../lib/types";
 
 type HotkeyField = "hotkey_switch_local" | "hotkey_switch_remote" | "hotkey_lock" | "hotkey_gaming";
 
@@ -103,11 +103,95 @@ function SwitchingCard({ config, kvm }: { config: Config; kvm: KvmStatus }) {
           <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/20">
             {t.input.gamingWarning}
           </p>
+          <Toggle
+            label={t.input.crossingAnimation}
+            hint={t.input.crossingAnimationHint}
+            checked={config.input.crossing_animation}
+            disabled={saver.busy}
+            onChange={(on) =>
+              void saver.save((c) => ({
+                ...c,
+                input: { ...c.input, crossing_animation: on, crossing_animation_asked: true },
+              }))
+            }
+          />
+          {config.input.crossing_animation && (
+            <CrossingStylePicker
+              value={config.input.crossing_style}
+              disabled={saver.busy}
+              onChange={(style) =>
+                void saver.save((c) => ({ ...c, input: { ...c.input, crossing_style: style } }))
+              }
+            />
+          )}
         </div>
         {saver.error && <ErrorMessage error={saver.error} onDismiss={saver.clear} />}
         {toggle.error && <ErrorMessage error={toggle.error} onDismiss={toggle.clear} />}
       </div>
     </Card>
+  );
+}
+
+const CROSSING_STYLES: CrossingStyle[] = ["streak", "ripple", "glow"];
+
+function CrossingStylePicker({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: CrossingStyle;
+  disabled: boolean;
+  onChange: (style: CrossingStyle) => void;
+}) {
+  const { t } = useI18n();
+  const names: Record<CrossingStyle, { label: string; hint: string }> = {
+    streak: { label: t.input.crossingStyleStreak, hint: t.input.crossingStyleStreakHint },
+    ripple: { label: t.input.crossingStyleRipple, hint: t.input.crossingStyleRippleHint },
+    glow: { label: t.input.crossingStyleGlow, hint: t.input.crossingStyleGlowHint },
+  };
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{t.input.crossingStyle}</p>
+      <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label={t.input.crossingStyle}>
+        {CROSSING_STYLES.map((style) => {
+          const checked = value === style;
+          return (
+            <button
+              key={style}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              disabled={disabled}
+              onClick={() => !checked && onChange(style)}
+              className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-start ring-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 disabled:opacity-60 ${
+                checked
+                  ? "bg-indigo-50 ring-2 ring-indigo-500 dark:bg-indigo-500/15"
+                  : "bg-white/60 ring-black/10 hover:bg-white dark:bg-white/5 dark:ring-white/10 dark:hover:bg-white/10"
+              }`}
+            >
+              <span
+                className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full ring-2 ${
+                  checked ? "ring-indigo-600 dark:ring-indigo-400" : "ring-neutral-300 dark:ring-neutral-600"
+                }`}
+              >
+                {checked && <span className="size-2 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-neutral-900 dark:text-neutral-50">
+                  {names[style].label}
+                  {style === "streak" && (
+                    <span className="ms-1.5 text-xs font-normal text-neutral-500 dark:text-neutral-400">
+                      {t.input.crossingStyleDefault}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-xs text-neutral-500 dark:text-neutral-400">{names[style].hint}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -75,6 +75,37 @@ pub struct InputConfig {
     pub hotkey_lock: String,
     pub hotkey_gaming: String,
     pub gaming_auto: bool,
+    pub crossing_animation: bool,
+    pub crossing_animation_asked: bool,
+    pub crossing_style: CrossingStyle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CrossingStyle {
+    Ripple,
+    Glow,
+    #[default]
+    Streak,
+}
+
+impl CrossingStyle {
+    pub fn code(self) -> u8 {
+        match self {
+            CrossingStyle::Ripple => 1,
+            CrossingStyle::Glow => 2,
+            CrossingStyle::Streak => 3,
+        }
+    }
+
+    pub fn from_code(code: u8) -> Option<CrossingStyle> {
+        match code {
+            1 => Some(CrossingStyle::Ripple),
+            2 => Some(CrossingStyle::Glow),
+            3 => Some(CrossingStyle::Streak),
+            _ => None,
+        }
+    }
 }
 
 impl Default for InputConfig {
@@ -86,6 +117,9 @@ impl Default for InputConfig {
             hotkey_lock: "ScrollLock".into(),
             hotkey_gaming: "Ctrl+Alt+G".into(),
             gaming_auto: true,
+            crossing_animation: false,
+            crossing_animation_asked: false,
+            crossing_style: CrossingStyle::default(),
         }
     }
 }

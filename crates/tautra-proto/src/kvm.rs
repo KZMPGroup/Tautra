@@ -107,6 +107,14 @@ impl PairLayout {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CrossEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MouseButton {
     Left,
     Right,
@@ -127,8 +135,13 @@ pub enum KvmMessage {
     Enter {
         x: i32,
         y: i32,
+        edge: Option<CrossEdge>,
     },
-    Leave,
+    Leave {
+        x: i32,
+        y: i32,
+        edge: Option<CrossEdge>,
+    },
     Button {
         button: MouseButton,
         down: bool,
@@ -156,6 +169,11 @@ pub enum KvmMessage {
         offer_id: u64,
     },
     LayoutGuide(Option<Vec<DevicePosition>>),
+    Prefs {
+        crossing_animation: bool,
+        crossing_style: u8,
+        changed: bool,
+    },
 }
 
 pub const DATAGRAM_MOUSE_MOVE: u8 = 1;

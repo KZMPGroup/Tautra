@@ -9,9 +9,10 @@ import { PageHeader } from "../components/PageHeader";
 import type { Page } from "../components/Sidebar";
 import { fmt, useI18n } from "../i18n";
 import { agentCall, Method, useAction, useAgent, useNow } from "../lib/agent";
-import { describeConnection, TONE_DOT, type Tone } from "../lib/connection";
+import { useConfigSaver } from "../lib/config";
+import { describeConnection, TONE_DOT } from "../lib/connection";
 import { duration, latency } from "../lib/format";
-import type { AgentStatus, KvmStatus, ServiceStatus } from "../lib/types";
+import type { AgentStatus, ServiceStatus } from "../lib/types";
 
 export function Home({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const { t } = useI18n();
@@ -25,8 +26,8 @@ export function Home({ onNavigate }: { onNavigate: (page: Page) => void }) {
         {status ? (
           <>
             <ServiceAlertCard />
+            <AnimationSuggestionCard />
             <ConnectionCard status={status} onNavigate={onNavigate} />
-            <KvmCard kvm={status.kvm} onNavigate={onNavigate} />
             {status.notices.length > 0 && (
               <Card title={t.home.noticesTitle}>
                 <NoticeList notices={status.notices} />
@@ -100,8 +101,32 @@ function ConnectionCard({ status, onNavigate }: { status: AgentStatus; onNavigat
             {view.hint && <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{view.hint}</p>}
           </div>
         </div>
-        {button}
+        <div className="flex flex-wrap items-center gap-2">
+          {status.kvm.state === "ready" && (
+            <Button icon="monitor" onClick={() => onNavigate("layout")}>
+              {t.home.kvmEditLayout}
+            </Button>
+          )}
+          {button}
+        </div>
       </div>
+
+      {(status.kvm.locked || status.kvm.gaming) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {status.kvm.locked && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+              <Icon name="lock" className="size-3.5" />
+              {t.home.kvmLocked}
+            </span>
+          )}
+          {status.kvm.gaming && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-800 dark:bg-violet-500/15 dark:text-violet-300">
+              <Icon name="gamepad" className="size-3.5" />
+              {t.home.kvmGaming}
+            </span>
+          )}
+        </div>
+      )}
 
       {c.state === "connected" && (
         <dl className="mt-5 grid grid-cols-3 gap-4 border-t border-black/5 pt-4 dark:border-white/10">
@@ -114,58 +139,6 @@ function ConnectionCard({ status, onNavigate }: { status: AgentStatus; onNavigat
       {action.error && (
         <div className="mt-4">
           <ErrorMessage error={action.error} onDismiss={action.clear} />
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function KvmCard({ kvm, onNavigate }: { kvm: KvmStatus; onNavigate: (page: Page) => void }) {
-  const { t } = useI18n();
-  const peer = kvm.layout?.devices.find((d) => !d.is_local)?.device_name ?? t.common.unknown;
-
-  let text = t.home.kvmInactive;
-  let tone: Tone = "idle";
-  if (kvm.state === "waiting") {
-    text = t.home.kvmWaiting;
-    tone = "busy";
-  } else if (kvm.state === "ready" && kvm.role === "input_host") {
-    text = fmt(kvm.active === "remote" ? t.home.kvmHostRemote : t.home.kvmHostLocal, { name: peer });
-    tone = "ok";
-  } else if (kvm.state === "ready" && kvm.role === "remote") {
-    text = fmt(kvm.controlled_by_peer ? t.home.kvmRemoteActive : t.home.kvmRemoteIdle, { name: peer });
-    tone = "ok";
-  }
-
-  return (
-    <Card
-      title={t.home.kvmTitle}
-      actions={
-        kvm.state === "ready" ? (
-          <Button icon="monitor" onClick={() => onNavigate("layout")}>
-            {t.home.kvmEditLayout}
-          </Button>
-        ) : undefined
-      }
-    >
-      <div className="flex items-start gap-3">
-        <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${TONE_DOT[tone]}`} />
-        <p className="min-w-0 flex-1 text-sm text-neutral-700 dark:text-neutral-300">{text}</p>
-      </div>
-      {(kvm.locked || kvm.gaming) && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {kvm.locked && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-              <Icon name="lock" className="size-3.5" />
-              {t.home.kvmLocked}
-            </span>
-          )}
-          {kvm.gaming && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-800 dark:bg-violet-500/15 dark:text-violet-300">
-              <Icon name="gamepad" className="size-3.5" />
-              {t.home.kvmGaming}
-            </span>
-          )}
         </div>
       )}
     </Card>
@@ -217,6 +190,38 @@ function ServiceAlertCard() {
         <p className="text-sm text-neutral-600 dark:text-neutral-400">{t.input.serviceIntro}</p>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">{t.input.serviceAdminNote}</p>
         {action.error && <ErrorMessage error={action.error} onDismiss={action.clear} />}
+      </div>
+    </Card>
+  );
+}
+
+function AnimationSuggestionCard() {
+  const { t } = useI18n();
+  const saver = useConfigSaver();
+  const config = saver.config;
+  if (!config || config.input.crossing_animation_asked) return null;
+
+  const answer = (on: boolean) =>
+    void saver.save((c) => ({
+      ...c,
+      input: { ...c.input, crossing_animation: on, crossing_animation_asked: true },
+    }));
+
+  return (
+    <Card title={t.home.animSuggestTitle}>
+      <div className="grid gap-3">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          {fmt(t.home.animSuggestBody, { page: t.nav.input })}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" icon="play" busy={saver.busy} onClick={() => answer(true)}>
+            {t.home.animEnable}
+          </Button>
+          <Button busy={saver.busy} onClick={() => answer(false)}>
+            {t.home.animDismiss}
+          </Button>
+        </div>
+        {saver.error && <ErrorMessage error={saver.error} onDismiss={saver.clear} />}
       </div>
     </Card>
   );

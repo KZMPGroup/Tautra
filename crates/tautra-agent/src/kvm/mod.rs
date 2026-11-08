@@ -50,6 +50,8 @@ pub fn hook_options(config: &InputConfig) -> HookOptions {
             gaming: parse(&config.hotkey_gaming),
         },
         gaming_auto: config.gaming_auto,
+        crossing_animation: config.crossing_animation,
+        crossing_style: config.crossing_style,
     }
 }
 

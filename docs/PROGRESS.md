@@ -357,3 +357,56 @@ Dihapus: fitur layar tambahan tidak ada lagi sejak 2026-10-28. Setelah build bar
 - Kartu Jaringan dihapus dari Home. Jaringan yang tidak diizinkan tetap terlihat lewat petunjuk di kartu Koneksi.
 - Teks memakai kunci terjemahan yang sudah ada (`input.service*`), jadi semua 25 bahasa langsung ikut.
 - Versi dinaikkan ke v1.1.13.
+
+## 2026-11-06 — Animasi perpindahan kursor, opsional (v1.1.14)
+- Permintaan pengguna: animasi masuk/keluar saat kursor berpindah perangkat, searah perpindahannya, opsional dan default mati, ditawarkan sebagai saran di Home saat pertama kali.
+- Modul baru `tautra_input::crossing`: satu jendela layered topmost yang tembus klik (thread `tautra-crossing`, dibuat saat pertama dipakai). `play(x, y, Exit|Enter)` mencari monitor dan tepi terdekat dari titik itu, lalu memutar tiga chevron biru selama 460 ms dengan fade in/out. Saat keluar, chevron bergerak ke arah tepi (menuju perangkat tujuan); saat masuk, chevron bergerak menjauhi tepi (datang dari perangkat asal). Ukuran 132 px dikali skala DPI monitor.
+- Pemicu: di perangkat input host saat `enter_remote` (titik keluar) dan `return_local` dengan target (titik masuk); di perangkat yang dikendalikan saat pesan `Enter` dan `Leave`.
+- Konfigurasi: `input.crossing_animation` (default false) dan `input.crossing_animation_asked` (default false). `HookOptions.crossing_animation` diteruskan ke hook.
+- UI: toggle "Animasi perpindahan" di halaman Input; kartu saran di Home (Aktifkan / Tidak, terima kasih) yang muncul sampai pengguna menjawab sekali. Teks baru diterjemahkan ke 25 bahasa.
+- Versi dinaikkan ke v1.1.14.
+
+## 2026-11-06 — Animasi riak tetesan air, setelan tersinkron, Home lebih ringkas (v1.1.15)
+- Masukan pengguna: animasi harus sangat sederhana dan kecil seperti tetesan air yang menyebar; setelan harus sinkron antar perangkat yang terhubung; tombol Edit layout cukup di kartu atas, tanpa kartu Keyboard & mouse.
+- `tautra_input::crossing` kini menggambar dua cincin riak biru kecil (56 px dikali skala DPI) yang melebar dan memudar selama 520 ms, berpusat di titik kursor keluar atau masuk. Panah/chevron dihapus.
+- Sinkronisasi: pesan KVM baru `KvmMessage::Prefs { crossing_animation, changed }`. Dikirim setelah `Hello` (changed=false) dan setiap kali nilai berubah dari UI (changed=true). Penerima menyimpan nilai itu ke konfigurasinya (dan menandai saran sudah dijawab) bila changed=true, atau bila changed=false dan nilainya aktif, sehingga saat baru tersambung animasi aktif bila salah satu perangkat mengaktifkannya. Tidak ada gema karena `prefs_sent` mencatat nilai terakhir.
+- Home: kartu Keyboard & mouse dihapus. Tombol Edit layout pindah ke kartu Koneksi (muncul saat KVM siap), begitu juga lencana Kursor terkunci dan Gaming Mode.
+- Teks animasi di 25 bahasa diperbarui (riak tetesan air, ikut berlaku di perangkat yang terhubung).
+- Versi dinaikkan ke v1.1.15.
+
+## 2026-11-07 — Riak perpindahan lebih lembut dan setengah lingkaran dari tepi layar (v1.1.16)
+- Masukan pengguna (dengan sketsa): riak harus minimalis, kecil, tidak kontras, agak transparan seperti air, dan berbentuk lengkung dari tepi layar tempat kursor masuk.
+- `tautra_input::crossing`: pusat riak kini tepat di titik kursor (`Frame.cx/cy`), bukan di tengah jendela yang dijepit ke monitor, sehingga di tepi layar hanya separuh lingkaran yang terlihat dan melengkung ke dalam layar.
+- Ukuran 44 px dikali skala DPI, tiga cincin tipis berurutan, warna biru muda `#9BD8F5`, alpha maksimum 130 lalu memudar, durasi 620 ms.
+- Versi dinaikkan ke v1.1.16.
+
+## 2026-11-07 — Riak selalu menempel di tepi layar (v1.1.17)
+- Masukan pengguna: saat kursor dipindah pelan riak sudah benar, tetapi saat cepat riak muncul agak jauh dari tepi sehingga terlihat lingkaran penuh. Riak harus selalu di pinggir dan berbentuk setengah lingkaran.
+- Log PC menunjukkan titik keluar bisa beberapa piksel dari tepi (x=1 sampai 7) karena kursor sudah dipindah sebelum benar-benar menyentuh tepi; di perangkat penerima posisinya bisa lebih jauh lagi.
+- `tautra_input::crossing::snap_to_edge` kini menempelkan pusat riak ke tepi monitor terdekat (kiri, kanan, atas, atau bawah) sebelum digambar, sehingga yang terlihat selalu setengah lingkaran di pinggir layar. Log trace `titik riak ditempelkan ke tepi layar` mencatat titik asli, titik hasil, dan tepinya.
+- Versi dinaikkan ke v1.1.17.
+
+## 2026-11-07 — Riak mengikuti tepi penyeberangan, animasi keluar dan masuk dibedakan (v1.1.18)
+- Masukan pengguna: saat kursor sangat cepat, riak kadang muncul di tepi layar yang bukan tepi ke perangkat lain; animasi keluar dan masuk harus berbeda.
+- Penyebab: riak menempel ke tepi monitor *terdekat* dari titik kursor, padahal saat gerakan cepat titik itu bisa lebih dekat ke tepi lain (misalnya dekat sudut), dan di perangkat penerima titik keluar diambil dari posisi kursor fisik yang bisa sudah bergeser.
+- `Crossing` di `tautra_input::geometry` kini membawa `edge` (tepi masuk di perangkat tujuan). `KvmMessage::Enter` membawa `edge: Option<CrossEdge>`; `KvmMessage::Leave` kini membawa `x, y, edge` (posisi virtual terakhir dan tepi keluar). `PROTOCOL_VERSION` naik ke 11.
+- `crossing::play(x, y, kind, edge)`: bila tepi diketahui, riak ditempelkan ke tepi itu; bila tidak (misalnya pindah lewat hotkey), ke tepi terdekat. Log trace mencatat tepi yang diminta dan yang dipakai.
+- Animasi: **masuk** = tiga cincin mengembang dari tepi lalu memudar; **keluar** = tiga cincin mengerut ke titik keluar (seperti tersedot) dengan alpha naik singkat lalu turun.
+- Versi dinaikkan ke v1.1.18.
+
+## 2026-11-07 — Tiga gaya animasi perpindahan yang bisa dipilih, mesin gambar baru yang ringan (v1.1.19)
+- Masukan pengguna (dengan lembar konsep "Cursor Transition Animation Concept"): buat beberapa opsi animasi agar pengguna bisa memilih, default opsi 3 (Light Streak), ringan di CPU/GPU tetapi tetap mulus di monitor dengan refresh rate berapa pun.
+- `InputConfig.crossing_style` (`ripple` | `glow` | `streak`, default `streak`). Ikut disinkronkan ke perangkat terhubung lewat `KvmMessage::Prefs { crossing_animation, crossing_style, changed }` (kode 1/2/3). Saat baru tersambung, perangkat yang animasinya mati mengikuti perangkat yang aktif; bila keduanya aktif masing-masing tetap memakai gayanya sampai salah satu diubah.
+- Gaya: **Garis cahaya** (default): masuk = garis cahaya tipis mengalir dari tepi ke dalam dengan titik di ujungnya; keluar = garis melesat ke arah tepi lalu hilang. **Riak air**: masuk = cincin mengembang; keluar = cincin mengerut. **Geser & pendar**: pendar lembut di sepanjang tepi; masuk = bergeser ke dalam lalu memudar; keluar = bergeser ke arah tepi lalu hilang.
+- Mesin gambar `tautra_input::crossing` ditulis ulang: jendela berlapis click-through dengan `UpdateLayeredWindow` per-piksel alpha (premultiplied BGRA di DIB section), hanya seukuran animasi (mis. 92×18 px untuk garis cahaya pada skala 100%), digambar dengan fungsi falloff polinomial murah tanpa alokasi per frame. Tempo frame mengikuti compositor lewat `DwmFlush` sehingga mulus di 60/120/144/240 Hz; bila DWM tidak tersedia memakai jeda 7 ms. Thread tidur penuh (GetMessage) saat tidak ada animasi. Log trace mencatat jumlah frame dan fps tiap animasi.
+- UI: halaman Keyboard & mouse menampilkan pilihan gaya (radio) saat animasi aktif. Teks saran di Home dan petunjuk toggle diperbarui menjadi umum, 25 bahasa.
+- Versi dinaikkan ke v1.1.19.
+
+## v1.1.20 — animasi perpindahan diperkaya sesuai lembar konsep (2026-11-07)
+
+- Ketiga gaya digambar ulang supaya sedekat mungkin dengan sketsa konsep, tetap kecil, transparan, dan murah (falloff polinomial, tanpa alokasi per frame, tempo `DwmFlush`).
+- **Riak air** (560 ms, 48×96 px): keluar = pendar kecil di tepi lalu tiga cincin setengah lingkaran mengembang berurutan (jeda 14% tiap cincin) sambil menipis dan memudar; masuk = pendar lembut mengerut ke titik masuk lalu kilau kecil enam jari di ujungnya.
+- **Geser & pendar** (480 ms, 40×120 px): pita cahaya vertikal lembut dengan inti terang dan halo. Keluar = pita bergeser ke arah tepi sambil halonya mengecil, ditambah bulatan pendar yang menyusut di tepi; masuk = pita muncul di tepi lalu bergeser ke dalam sambil halonya melebar dan memudar.
+- **Garis cahaya** (400 ms, 84×40 px): keluar = garis cahaya dengan titik di kepala melesat ke tepi, ekornya meruncing, pendar di tepi menyusut; masuk = garis melesat dari tepi ke dalam, ekor menyusul kepala, lalu kilau enam jari dan pendar lembut di titik berhenti sebelum memudar.
+- Durasi diperpendek (400–560 ms) agar terasa ringan di layar refresh tinggi.
+- Versi dinaikkan ke v1.1.20.
