@@ -251,10 +251,20 @@ enum Action {
 
 struct RemoteCursor {
     park: (i32, i32),
+    entry: (i32, i32),
     x: f64,
     y: f64,
     screen: usize,
     sent: (i32, i32),
+}
+
+const TRAIL_WINDOW: Duration = Duration::from_millis(700);
+const TRAIL_INTERVAL: Duration = Duration::from_millis(6);
+
+struct TrailReport {
+    from: (i32, i32),
+    since: Instant,
+    sent: Instant,
 }
 
 enum Mode {
@@ -286,6 +296,7 @@ struct State {
     remote_buttons: u8,
     local_screen: usize,
     edge_since: Option<(Edge, Instant)>,
+    trail: Option<TrailReport>,
     cursor_hidden: bool,
     drag: DragPhase,
     held: Arc<AtomicBool>,
@@ -488,8 +499,10 @@ impl State {
         self.edge_since = None;
         self.drag = DragPhase::None;
         self.held.store(false, Ordering::Release);
+        self.trail = None;
         self.mode = Mode::Remote(RemoteCursor {
             park: local,
+            entry: (target.x, target.y),
             x: target.x as f64,
             y: target.y as f64,
             screen: target.screen,
@@ -527,6 +540,15 @@ impl State {
             Some(c) => {
                 self.local_screen = c.screen;
                 place_cursor(c.x, c.y);
+                self.trail = if notify_peer {
+                    Some(TrailReport {
+                        from: (c.x, c.y),
+                        since: Instant::now(),
+                        sent: Instant::now(),
+                    })
+                } else {
+                    None
+                };
                 if self.options.crossing_animation {
                     crate::crossing::play(
                         c.x,
@@ -774,6 +796,7 @@ impl State {
             return false;
         }
         let (x, y) = (info.pt.x, info.pt.y);
+        self.report_trail(x, y);
         self.refresh_fullscreen();
         let dragging = self.local_buttons == LEFT_BIT;
         let blocked = self.locked || self.effective_gaming() || (self.local_buttons != 0 && !dragging);
@@ -808,6 +831,23 @@ impl State {
             }
             None => false,
         }
+    }
+
+    fn report_trail(&mut self, x: i32, y: i32) {
+        let Some(trail) = self.trail.as_mut() else {
+            return;
+        };
+        if trail.since.elapsed() > TRAIL_WINDOW {
+            tracing::trace!(?trail.from, "laporan jejak kursor ke perangkat lain selesai");
+            self.trail = None;
+            return;
+        }
+        if trail.sent.elapsed() < TRAIL_INTERVAL {
+            return;
+        }
+        trail.sent = Instant::now();
+        let (dx, dy) = (x - trail.from.0, y - trail.from.1);
+        self.sink.message(KvmMessage::Trail { dx, dy });
     }
 
     fn remote_mouse(&mut self, msg: u32, info: &MSLLHOOKSTRUCT) {
@@ -904,6 +944,7 @@ impl State {
         tracing::trace!(px, py, dx, dy, ?point, screen, ?edge, "gerak mouse jarak jauh");
         if point != remote.sent {
             remote.sent = point;
+            crate::crossing::trail(point.0 - remote.entry.0, point.1 - remote.entry.1);
             self.sink.mouse_move(point.0, point.1);
         }
         repark(park);
@@ -1058,6 +1099,7 @@ fn run(init: Init, rx: Receiver<Command>, ready: SyncSender<Result<u32, InputErr
             remote_buttons: 0,
             local_screen: 0,
             edge_since: None,
+            trail: None,
             cursor_hidden: false,
             drag: DragPhase::None,
             held: init.held,

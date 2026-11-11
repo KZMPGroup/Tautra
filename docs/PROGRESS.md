@@ -410,3 +410,38 @@ Dihapus: fitur layar tambahan tidak ada lagi sejak 2026-10-28. Setelah build bar
 - **Garis cahaya** (400 ms, 84×40 px): keluar = garis cahaya dengan titik di kepala melesat ke tepi, ekornya meruncing, pendar di tepi menyusut; masuk = garis melesat dari tepi ke dalam, ekor menyusul kepala, lalu kilau enam jari dan pendar lembut di titik berhenti sebelum memudar.
 - Durasi diperpendek (400–560 ms) agar terasa ringan di layar refresh tinggi.
 - Versi dinaikkan ke v1.1.20.
+
+## v1.1.21 — animasi masuk mengikuti kursor (2026-11-08)
+
+- Animasi masuk (Enter) pada ketiga gaya kini mengikuti kursor selama kursor masih berada di dalam kedalaman jendela animasi dari tepi: posisi sepanjang tepi mengikuti kursor (jendela berlapis dipindah tiap frame lewat `UpdateLayeredWindow`), dan jarak ke dalam (`reach`) mengikuti jarak kursor dari tepi, dibatasi `depth - margin` per gaya (garis cahaya 62→maks 68 px, riak 14→34 px, geser & pendar 24→28 px pada skala 100%).
+- Begitu kursor melewati kedalaman jendela, animasi berhenti mengikuti dan membeku di posisi terakhir; kursor yang langsung cepat membuat animasi memakai jarak bawaan seperti sebelumnya.
+- Garis cahaya: kepala garis dan kilau pecahan tepat di kursor (kepala = min(jarak animasi, jarak kursor)); riak: pendar mengerut dan kilau berpusat di kursor; geser & pendar: pita bergeser sampai ke posisi kursor.
+- Animasi keluar (Exit) tidak mengikuti kursor karena kursor sudah berada di perangkat lain.
+- Log trace mencatat saat animasi berhenti mengikuti (jarak kursor, kedalaman, reach).
+- Versi dinaikkan ke v1.1.21.
+
+## v1.1.22 — arah animasi masuk mengikuti arah gerak kursor (2026-11-08)
+
+- Titik awal animasi masuk tetap di tempat kursor menyeberang (jendela tidak lagi ikut bergeser sepanjang tepi). Yang mengikuti kursor adalah vektor sasaran `target = (u, v)` dari titik masuk ke posisi kursor, dibatasi `max_reach`; bila kursor masih sangat dekat titik masuk dipakai arah terakhir (awalnya tegak lurus tepi).
+- Garis cahaya: garis digambar dari titik masuk ke arah kursor (proyeksi sepanjang/menyamping vektor arah), kepala dan kilau pecahan tepat di kursor; kursor dari atas ke bawah membuat garisnya miring mengikuti arah itu.
+- Riak: pendar mengerut ke titik kursor dan kilau di kursor. Geser & pendar: pita tetap sejajar tepi, bergeser sampai kedalaman kursor dan pusatnya mengikuti kursor sepanjang tepi.
+- Jendela animasi masuk diperlebar sepanjang tepi menjadi maks(panjang, 2×kedalaman) supaya arah diagonal muat (garis cahaya 84×168 px pada skala 100%). Mengikuti berhenti bila kursor keluar dari jendela itu.
+- Versi dinaikkan ke v1.1.22.
+
+## v1.1.23 — animasi keluar jadi cermin animasi masuk, aturan animasi didokumentasikan (2026-11-08)
+
+- Animasi keluar kini mengikuti jejak kursor di perangkat seberang lewat `crossing::trail(dx, dy)` (delta sejak titik masuk). Sisi pemegang mouse memanggilnya langsung dari posisi kursor virtual (`remote.sent - remote.entry`); saat kursor pulang ke pemegang mouse, pemegang mouse mengirim pesan baru `KvmMessage::Trail { dx, dy }` selama 700 ms (tiap 6 ms) dan `session.rs` meneruskannya. Protokol naik ke v12.
+- Delta dipetakan ke (u, v) layar keluar sebagai cermin (v dibalik), sehingga garis cahaya keluar mengarah berlawanan dengan garis masuk di perangkat lain. Keluar hanya memakai arah, bukan panjang. Pita geser & pendar keluar condong ke arah cermin.
+- Saat kursor terlalu cepat dan langsung keluar dari jendela pada pengecekan pertama, arah tetap disimpan ke `target` sebelum berhenti mengikuti, jadi garis tidak lagi selalu tegak lurus tepi.
+- Jendela animasi keluar ikut diperlebar ke maks(panjang, 2×kedalaman).
+- Dokumen baru `docs/ANIMASI.md` berisi istilah, aturan umum (jangkar tetap, koordinat u/v, target/dir, aturan mengikuti dan berhenti, cermin keluar, efisiensi, log), serta langkah menambah gaya baru; ditautkan dari `CLAUDE.md`.
+- Versi dinaikkan ke v1.1.23.
+
+## v1.1.24 — garis cahaya menyusuri jalur kursor, arah tidak lagi melompat (2026-11-08)
+
+- Sasaran tunggal `target` diganti `Path`: urutan titik (u, v) yang dilalui kursor sejak jangkar, dengan panjang busur kumulatif (maks 48 titik, titik baru bila bergerak ≥ 1,5 px, total dibatasi `max_reach`). Jalur hanya bertambah, tidak pernah diputar, sehingga arah animasi masuk maupun keluar tidak berpindah tiba-tiba saat kursor cepat.
+- Garis cahaya digambar menyusuri jalur (jarak piksel ke polyline lewat `Path::nearest`, terang menurut panjang busur); kepala, kilau pecahan, dan pendar di `Path::at(head)`. Riak dan geser & pendar memakai ujung jalur.
+- Keluar memakai jejak cermin dari perangkat seberang sebagai titik jalur; sebelum jejak pertama datang hanya pendar tepi yang tampak.
+- Bila kursor diam sampai 25% durasi, ditambahkan titik bawaan tegak lurus tepi (`settle`) dan mengikuti berhenti. Log trace mencatat jumlah titik dan panjang jalur saat berhenti.
+- `docs/ANIMASI.md` diperbarui (istilah Jalur, aturan 3–5, tabel gaya).
+- Versi dinaikkan ke v1.1.24.

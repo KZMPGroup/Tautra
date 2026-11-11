@@ -4,7 +4,7 @@ members = ["crates/*", "ui/src-tauri"]
 default-members = ["crates/*"]
 
 [workspace.package]
-version = "1.1.20"
+version = "1.1.24"
 edition = "2021"
 rust-version = "1.85"
 authors = ["KZMP Group"]

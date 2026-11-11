@@ -15,6 +15,10 @@ Baca `docs/PROGRESS.md` dulu, lanjutkan dari bagian yang belum selesai. Balas da
 - Build dan pasang di PC pengguna dulu (`%LOCALAPPDATA%\Tautra`). Push ke GitHub dan rilis hanya setelah pengguna menguji dan menyatakan OK.
 - Catat setiap perubahan di `docs/PROGRESS.md`.
 
+## Animasi perpindahan kursor
+
+Aturan dan cara kerja animasi masuk/keluar ada di `docs/ANIMASI.md`. Baca sebelum mengubah atau menambah gaya animasi.
+
 ## Gaya kode
 
 - Tanpa komentar di kode. Pesan log dan teks pengguna dalam bahasa Indonesia.

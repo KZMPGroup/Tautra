@@ -708,6 +708,7 @@ impl Ctx {
             KvmMessage::DragFiles(offer) => self.queue_drag(PendingKind::Offer(offer)),
             KvmMessage::DragReturn { offer_id } => self.queue_drag(PendingKind::Return(offer_id)),
             KvmMessage::LayoutGuide(positions) => self.show_guide(positions.as_deref()),
+            KvmMessage::Trail { dx, dy } => tautra_input::crossing::trail(dx, dy),
             KvmMessage::Prefs {
                 crossing_animation,
                 crossing_style,

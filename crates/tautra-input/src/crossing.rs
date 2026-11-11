@@ -14,7 +14,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetCursorPos, GetMessageW, PeekMessageW, PostThreadMessageW,
     RegisterClassExW, SetWindowPos, ShowWindow, TranslateMessage, UpdateLayeredWindow, HWND_TOPMOST, MSG, PM_NOREMOVE, PM_REMOVE,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, ULW_ALPHA, WM_APP, WNDCLASSEXW,
     WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
@@ -48,6 +48,17 @@ struct Player {
 }
 
 static PLAYER: OnceLock<Option<Player>> = OnceLock::new();
+static TRAIL: Mutex<Option<(i32, i32)>> = Mutex::new(None);
+
+pub fn trail(dx: i32, dy: i32) {
+    if let Ok(mut t) = TRAIL.lock() {
+        *t = Some((dx, dy));
+    }
+}
+
+fn take_trail() -> Option<(i32, i32)> {
+    TRAIL.lock().ok().and_then(|t| *t)
+}
 
 fn player() -> Option<&'static Player> {
     PLAYER
@@ -81,6 +92,9 @@ pub fn play(x: i32, y: i32, kind: CrossKind, edge: Option<Edge>, style: Crossing
     let Some(player) = player() else {
         return;
     };
+    if let Ok(mut t) = TRAIL.lock() {
+        *t = None;
+    }
     if let Ok(mut pending) = player.pending.lock() {
         *pending = Some(Request {
             x,
@@ -134,6 +148,8 @@ struct Spec {
     duration: f32,
     depth: f32,
     length: f32,
+    reach: f32,
+    margin: f32,
 }
 
 fn spec(style: CrossingStyle) -> Spec {
@@ -142,16 +158,22 @@ fn spec(style: CrossingStyle) -> Spec {
             duration: 560.0,
             depth: 48.0,
             length: 96.0,
+            reach: 14.0,
+            margin: 14.0,
         },
         CrossingStyle::Glow => Spec {
             duration: 480.0,
             depth: 40.0,
             length: 120.0,
+            reach: 24.0,
+            margin: 12.0,
         },
         CrossingStyle::Streak => Spec {
             duration: 400.0,
             depth: 84.0,
             length: 40.0,
+            reach: 62.0,
+            margin: 16.0,
         },
     }
 }
@@ -235,13 +257,38 @@ struct Anim {
     kind: CrossKind,
     style: CrossingStyle,
     edge: Edge,
+    rect: RECT,
     scale: f32,
     duration: f32,
     origin: (i32, i32),
     anchor: (f32, f32),
+    path: Path,
+    fallback: (f32, f32),
+    max_reach: f32,
+    following: bool,
     surface: Surface,
     started: Instant,
     frames: u32,
+}
+
+fn place(rect: &RECT, edge: Edge, x: i32, y: i32, width: i32, height: i32) -> ((i32, i32), (f32, f32)) {
+    let clamp_x = |v: i32| v.clamp(rect.left, (rect.right - width).max(rect.left));
+    let clamp_y = |v: i32| v.clamp(rect.top, (rect.bottom - height).max(rect.top));
+    match edge {
+        Edge::Left => ((rect.left, clamp_y(y - height / 2)), (rect.left as f32, y as f32 + 0.5)),
+        Edge::Right => ((rect.right - width, clamp_y(y - height / 2)), (rect.right as f32, y as f32 + 0.5)),
+        Edge::Top => ((clamp_x(x - width / 2), rect.top), (x as f32 + 0.5, rect.top as f32)),
+        Edge::Bottom => ((clamp_x(x - width / 2), rect.bottom - height), (x as f32 + 0.5, rect.bottom as f32)),
+    }
+}
+
+fn inward(rect: &RECT, edge: Edge, x: i32, y: i32) -> f32 {
+    match edge {
+        Edge::Left => (x - rect.left) as f32,
+        Edge::Right => (rect.right - 1 - x) as f32,
+        Edge::Top => (y - rect.top) as f32,
+        Edge::Bottom => (rect.bottom - 1 - y) as f32,
+    }
 }
 
 impl Anim {
@@ -255,18 +302,13 @@ impl Anim {
         let edge = request.edge.unwrap_or_else(|| nearest_edge(&rect, x, y));
         let s = spec(request.style);
         let depth = (s.depth * scale).ceil() as i32;
-        let length = (s.length * scale).ceil() as i32;
+        let length = (s.length.max(2.0 * s.depth) * scale).ceil() as i32;
         let (width, height) = if edge.horizontal() { (depth, length) } else { (length, depth) };
         let width = width.min(rect.right - rect.left).max(1);
         let height = height.min(rect.bottom - rect.top).max(1);
-        let clamp_x = |v: i32| v.clamp(rect.left, (rect.right - width).max(rect.left));
-        let clamp_y = |v: i32| v.clamp(rect.top, (rect.bottom - height).max(rect.top));
-        let (origin, anchor) = match edge {
-            Edge::Left => ((rect.left, clamp_y(y - height / 2)), (rect.left as f32, y as f32 + 0.5)),
-            Edge::Right => ((rect.right - width, clamp_y(y - height / 2)), (rect.right as f32, y as f32 + 0.5)),
-            Edge::Top => ((clamp_x(x - width / 2), rect.top), (x as f32 + 0.5, rect.top as f32)),
-            Edge::Bottom => ((clamp_x(x - width / 2), rect.bottom - height), (x as f32 + 0.5, rect.bottom as f32)),
-        };
+        let (origin, anchor) = place(&rect, edge, x, y, width, height);
+        let max_reach = ((s.depth - s.margin) * scale).max(1.0);
+        let following = true;
         let surface = Surface::new(width, height)?;
         tracing::trace!(
             x = request.x,
@@ -278,16 +320,22 @@ impl Anim {
             width,
             height,
             ?origin,
+            following,
             "animasi perpindahan kursor dimulai di tepi layar"
         );
         Some(Anim {
             kind: request.kind,
             style: request.style,
             edge,
+            rect,
             scale,
             duration: s.duration,
             origin,
             anchor,
+            path: Path::new(),
+            fallback: (s.reach * scale, 0.0),
+            max_reach,
+            following,
             surface,
             started: Instant::now(),
             frames: 0,
@@ -298,8 +346,91 @@ impl Anim {
         (self.started.elapsed().as_secs_f32() * 1000.0 / self.duration).min(1.0)
     }
 
+    fn follow_cursor(&mut self) {
+        if !self.following {
+            return;
+        }
+        let (u, v) = match self.kind {
+            CrossKind::Enter => {
+                let mut point = POINT::default();
+                if let Err(e) = unsafe { GetCursorPos(&mut point) } {
+                    tracing::trace!("posisi kursor untuk animasi tidak terbaca: {}", e.message());
+                    return;
+                }
+                let u = inward(&self.rect, self.edge, point.x, point.y);
+                let cx = point.x as f32 + 0.5;
+                let cy = point.y as f32 + 0.5;
+                let v = if self.edge.horizontal() { cy - self.anchor.1 } else { cx - self.anchor.0 };
+                (u, v)
+            }
+            CrossKind::Exit => {
+                let Some((dx, dy)) = take_trail() else {
+                    return;
+                };
+                let (dx, dy) = (dx as f32, dy as f32);
+                match self.edge {
+                    Edge::Right => (dx, -dy),
+                    Edge::Left => (-dx, -dy),
+                    Edge::Bottom => (dy, -dx),
+                    Edge::Top => (-dy, -dx),
+                }
+            }
+        };
+        let (depth, length) = if self.edge.horizontal() {
+            (self.surface.width as f32, self.surface.height as f32)
+        } else {
+            (self.surface.height as f32, self.surface.width as f32)
+        };
+        let step = 1.5 * self.scale;
+        let d = (u * u + v * v).sqrt();
+        if u < 0.0 || u > depth || v.abs() > length * 0.5 {
+            self.following = false;
+            if d >= step && u > 0.0 {
+                let (eu, ev) = self.path.end();
+                let (du, dv) = (u - eu, v - ev);
+                let dd = (du * du + dv * dv).sqrt().max(0.001);
+                let room = (self.max_reach - self.path.len()).max(step);
+                self.path.push((eu + du / dd * room, ev + dv / dd * room));
+            }
+            tracing::trace!(
+                kind = ?self.kind,
+                u,
+                v,
+                depth,
+                titik = self.path.pts.len(),
+                panjang = self.path.len(),
+                "kursor sudah jauh dari tepi, animasi berhenti mengikuti"
+            );
+            return;
+        }
+        let (eu, ev) = self.path.end();
+        let (du, dv) = (u - eu, v - ev);
+        let dd = (du * du + dv * dv).sqrt();
+        if dd < step {
+            return;
+        }
+        let room = self.max_reach - self.path.len();
+        if room <= 0.0 || !self.path.push(if dd > room { (eu + du / dd * room, ev + dv / dd * room) } else { (u, v) }) {
+            self.following = false;
+            tracing::trace!(
+                kind = ?self.kind,
+                titik = self.path.pts.len(),
+                panjang = self.path.len(),
+                "jalur animasi penuh, berhenti mengikuti"
+            );
+        }
+    }
+
+    fn settle(&mut self, p: f32) {
+        if self.path.pts.len() == 1 && p > 0.25 {
+            self.path.push(self.fallback);
+            self.following = false;
+            tracing::trace!(kind = ?self.kind, "kursor tidak bergerak, animasi memakai arah bawaan");
+        }
+    }
+
     fn render(&mut self, p: f32) {
-        let frame = Frame::new(self.style, self.kind, p, self.scale);
+        let frame = Frame::new(self.style, self.kind, p, self.scale, &self.path);
         let (ox, oy) = self.origin;
         let (ax, ay) = self.anchor;
         let edge = self.edge;
@@ -315,13 +446,15 @@ impl Anim {
                     Edge::Top => (sy - ay, sx - ax),
                     Edge::Bottom => (ay - sy, sx - ax),
                 };
-                *pixel = premultiplied(frame.intensity(u, v).clamp(0.0, 1.0) * MAX_ALPHA);
+                *pixel = premultiplied(frame.intensity(u, v, &self.path).clamp(0.0, 1.0) * MAX_ALPHA);
             }
         }
     }
 
     fn present(&mut self, hwnd: HWND) -> bool {
         let p = self.progress();
+        self.follow_cursor();
+        self.settle(p);
         self.render(p);
         let dst = POINT {
             x: self.origin.0,
@@ -454,8 +587,93 @@ fn sparkle(du: f32, dv: f32, inner: f32, outer: f32, spokes: f32) -> f32 {
     beam * along * along
 }
 
+const PATH_MAX: usize = 48;
+
+struct Path {
+    pts: Vec<(f32, f32)>,
+    cum: Vec<f32>,
+}
+
+impl Path {
+    fn new() -> Path {
+        let mut pts = Vec::with_capacity(PATH_MAX);
+        let mut cum = Vec::with_capacity(PATH_MAX);
+        pts.push((0.0, 0.0));
+        cum.push(0.0);
+        Path { pts, cum }
+    }
+
+    fn len(&self) -> f32 {
+        *self.cum.last().unwrap_or(&0.0)
+    }
+
+    fn end(&self) -> (f32, f32) {
+        *self.pts.last().unwrap_or(&(0.0, 0.0))
+    }
+
+    fn push(&mut self, p: (f32, f32)) -> bool {
+        if self.pts.len() >= PATH_MAX {
+            return false;
+        }
+        let (eu, ev) = self.end();
+        let seg = ((p.0 - eu).powi(2) + (p.1 - ev).powi(2)).sqrt();
+        let total = self.len() + seg;
+        self.pts.push(p);
+        self.cum.push(total);
+        true
+    }
+
+    fn at(&self, s: f32) -> (f32, f32) {
+        if s <= 0.0 {
+            return self.pts[0];
+        }
+        for i in 1..self.pts.len() {
+            if s <= self.cum[i] {
+                let seg = self.cum[i] - self.cum[i - 1];
+                if seg <= 0.0 {
+                    return self.pts[i];
+                }
+                let f = (s - self.cum[i - 1]) / seg;
+                let (a, b) = (self.pts[i - 1], self.pts[i]);
+                return (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f);
+            }
+        }
+        self.end()
+    }
+
+    fn nearest(&self, u: f32, v: f32, from: f32, to: f32, reach: f32) -> Option<(f32, f32)> {
+        let mut best: Option<(f32, f32)> = None;
+        for i in 1..self.pts.len() {
+            let (c0, c1) = (self.cum[i - 1], self.cum[i]);
+            if c1 < from || c0 > to {
+                continue;
+            }
+            let (a, b) = (self.pts[i - 1], self.pts[i]);
+            let seg = c1 - c0;
+            if seg <= 0.0 {
+                continue;
+            }
+            let (au, av) = (u - a.0, v - a.1);
+            if au.abs() > seg + reach || av.abs() > seg + reach {
+                continue;
+            }
+            let (bu, bv) = (b.0 - a.0, b.1 - a.1);
+            let f = ((au * bu + av * bv) / (seg * seg)).clamp(0.0, 1.0);
+            let s = (c0 + f * seg).clamp(from, to);
+            let f = (s - c0) / seg;
+            let (qu, qv) = (a.0 + bu * f, a.1 + bv * f);
+            let dist = ((u - qu).powi(2) + (v - qv).powi(2)).sqrt();
+            if dist <= reach && best.map_or(true, |(d, _)| dist < d) {
+                best = Some((dist, s));
+            }
+        }
+        best
+    }
+}
+
 struct Glow {
     du: f32,
+    dv: f32,
     radius: f32,
     level: f32,
 }
@@ -468,6 +686,7 @@ struct Ring {
 
 struct Spark {
     du: f32,
+    dv: f32,
     inner: f32,
     outer: f32,
     level: f32,
@@ -475,6 +694,7 @@ struct Spark {
 
 struct Band {
     center: f32,
+    dv: f32,
     half: f32,
     core: f32,
     halo: f32,
@@ -487,6 +707,33 @@ struct Trail {
     thick: f32,
     dot: f32,
     level: f32,
+}
+
+fn unit(target: (f32, f32)) -> ((f32, f32), f32) {
+    let d = (target.0 * target.0 + target.1 * target.1).sqrt();
+    if d < 0.001 {
+        ((1.0, 0.0), 0.0)
+    } else {
+        ((target.0 / d, target.1 / d), d)
+    }
+}
+
+fn no_spark() -> Spark {
+    Spark {
+        du: 0.0,
+        dv: 0.0,
+        inner: 0.0,
+        outer: 0.0,
+        level: 0.0,
+    }
+}
+
+fn no_rings() -> [Ring; 3] {
+    [
+        Ring { radius: 0.0, width: 1.0, level: 0.0 },
+        Ring { radius: 0.0, width: 1.0, level: 0.0 },
+        Ring { radius: 0.0, width: 1.0, level: 0.0 },
+    ]
 }
 
 enum Frame {
@@ -507,16 +754,20 @@ enum Frame {
 }
 
 impl Frame {
-    fn new(style: CrossingStyle, kind: CrossKind, p: f32, s: f32) -> Frame {
+    fn new(style: CrossingStyle, kind: CrossKind, p: f32, s: f32, path: &Path) -> Frame {
+        let target = path.end();
+        let (dir, _) = unit(target);
+        let total = path.len();
         match style {
             CrossingStyle::Ripple => match kind {
                 CrossKind::Exit => {
                     let glow = Glow {
                         du: 0.0,
+                        dv: 0.0,
                         radius: 16.0 * s * (1.0 - ease_in(window(p, 0.0, 0.45))),
                         level: 0.32 * (1.0 - window(p, 0.0, 0.5)),
                     };
-                    let mut rings = [Ring { radius: 0.0, width: 1.0, level: 0.0 }, Ring { radius: 0.0, width: 1.0, level: 0.0 }, Ring { radius: 0.0, width: 1.0, level: 0.0 }];
+                    let mut rings = no_rings();
                     for (i, r) in rings.iter_mut().enumerate() {
                         let t = window(p, i as f32 * 0.14, 1.0);
                         r.radius = 5.0 * s + ease_out(t) * 38.0 * s;
@@ -526,26 +777,29 @@ impl Frame {
                     Frame::Ripple {
                         glow,
                         rings,
-                        spark: Spark { du: 0.0, inner: 0.0, outer: 0.0, level: 0.0 },
+                        spark: no_spark(),
                     }
                 }
                 CrossKind::Enter => {
                     let t = window(p, 0.0, 0.7);
+                    let k = 0.45 + ease_out(t) * 0.55;
                     let glow = Glow {
-                        du: 6.0 * s + ease_out(t) * 8.0 * s,
+                        du: target.0 * k,
+                        dv: target.1 * k,
                         radius: 34.0 * s - ease_in(t) * 26.0 * s,
                         level: 0.36 * swell(window(p, 0.0, 0.8), 0.12),
                     };
                     let st = window(p, 0.5, 1.0);
                     let spark = Spark {
-                        du: 14.0 * s,
+                        du: target.0,
+                        dv: target.1,
                         inner: 4.0 * s + st * 3.0 * s,
                         outer: 9.0 * s + st * 5.0 * s,
                         level: 0.9 * swell(st, 0.25),
                     };
                     Frame::Ripple {
                         glow,
-                        rings: [Ring { radius: 0.0, width: 1.0, level: 0.0 }, Ring { radius: 0.0, width: 1.0, level: 0.0 }, Ring { radius: 0.0, width: 1.0, level: 0.0 }],
+                        rings: no_rings(),
                         spark,
                     }
                 }
@@ -554,6 +808,7 @@ impl Frame {
                 CrossKind::Exit => {
                     let band = Band {
                         center: 2.0 * s + (1.0 - ease_in(p)) * 14.0 * s,
+                        dv: dir.1 * 12.0 * s,
                         half: 56.0 * s,
                         core: 1.6 * s,
                         halo: (14.0 - 6.0 * p) * s,
@@ -561,6 +816,7 @@ impl Frame {
                     };
                     let glow = Glow {
                         du: 2.0 * s,
+                        dv: 0.0,
                         radius: 22.0 * s * (1.0 - window(p, 0.0, 0.6)),
                         level: 0.25 * (1.0 - window(p, 0.0, 0.6)),
                     };
@@ -568,15 +824,18 @@ impl Frame {
                 }
                 CrossKind::Enter => {
                     let t = window(p, 0.0, 0.75);
+                    let travel = (target.0 - 2.0 * s).max(0.0);
                     let band = Band {
-                        center: 2.0 * s + ease_out(t) * 22.0 * s,
+                        center: 2.0 * s + ease_out(t) * travel,
+                        dv: target.1 * ease_out(t),
                         half: 56.0 * s,
                         core: 1.6 * s,
                         halo: (8.0 + 12.0 * t) * s,
                         level: swell(p, 0.15),
                     };
                     let glow = Glow {
-                        du: 2.0 * s + ease_out(t) * 20.0 * s,
+                        du: 2.0 * s + ease_out(t) * travel,
+                        dv: target.1 * ease_out(t),
                         radius: (10.0 + 18.0 * t) * s,
                         level: 0.22 * swell(p, 0.2),
                     };
@@ -585,7 +844,7 @@ impl Frame {
             },
             CrossingStyle::Streak => match kind {
                 CrossKind::Exit => {
-                    let head = (40.0 - ease_in(p) * 10.0) * s;
+                    let head = ((40.0 - ease_in(p) * 10.0) * s).min(total);
                     let trail = Trail {
                         head,
                         tail: 0.0,
@@ -595,18 +854,20 @@ impl Frame {
                     };
                     let glow = Glow {
                         du: 0.0,
+                        dv: 0.0,
                         radius: 14.0 * s * (1.0 - window(p, 0.0, 0.5)),
                         level: 0.3 * (1.0 - window(p, 0.0, 0.5)),
                     };
                     Frame::Streak {
                         trail,
                         glow,
-                        spark: Spark { du: 0.0, inner: 0.0, outer: 0.0, level: 0.0 },
+                        spark: no_spark(),
                     }
                 }
                 CrossKind::Enter => {
                     let t = window(p, 0.0, 0.65);
-                    let head = ease_out(t) * 62.0 * s;
+                    let head = (ease_out(t) * 62.0 * s).min(total);
+                    let (hu, hv) = path.at(head);
                     let trail = Trail {
                         head,
                         tail: (head - 44.0 * s * (1.0 - window(p, 0.5, 1.0))).max(0.0),
@@ -616,13 +877,15 @@ impl Frame {
                     };
                     let st = window(p, 0.4, 1.0);
                     let spark = Spark {
-                        du: head,
+                        du: hu,
+                        dv: hv,
                         inner: 4.5 * s + st * 2.0 * s,
                         outer: 10.0 * s + st * 5.0 * s,
                         level: swell(st, 0.3),
                     };
                     let glow = Glow {
-                        du: head,
+                        du: hu,
+                        dv: hv,
                         radius: 12.0 * s,
                         level: 0.2 * swell(window(p, 0.2, 1.0), 0.3),
                     };
@@ -632,24 +895,24 @@ impl Frame {
         }
     }
 
-    fn intensity(&self, u: f32, v: f32) -> f32 {
+    fn intensity(&self, u: f32, v: f32, path: &Path) -> f32 {
         match self {
             Frame::Ripple { glow, rings, spark } => {
-                let mut a = glow.level * blob(u - glow.du, v, glow.radius);
+                let mut a = glow.level * blob(u - glow.du, v - glow.dv, glow.radius);
                 for r in rings {
                     if r.level > 0.0 {
                         a += r.level * ring(u, v, r.radius, r.width);
                     }
                 }
                 if spark.level > 0.0 {
-                    a += spark.level * sparkle(u - spark.du, v, spark.inner, spark.outer, 6.0);
+                    a += spark.level * sparkle(u - spark.du, v - spark.dv, spark.inner, spark.outer, 6.0);
                 }
                 a
             }
             Frame::Glow { band, glow } => {
-                let mut a = glow.level * blob(u - glow.du, v, glow.radius);
+                let mut a = glow.level * blob(u - glow.du, v - glow.dv, glow.radius);
                 if band.level > 0.0 {
-                    let along = soft(v / band.half);
+                    let along = soft((v - band.dv) / band.half);
                     if along > 0.0 {
                         let d = u - band.center;
                         a += (0.85 * bump(d / band.core) + 0.3 * soft(d / band.halo)) * along * band.level;
@@ -658,18 +921,20 @@ impl Frame {
                 a
             }
             Frame::Streak { trail, glow, spark } => {
-                let mut a = glow.level * blob(u - glow.du, v, glow.radius);
+                let mut a = glow.level * blob(u - glow.du, v - glow.dv, glow.radius);
                 if trail.level > 0.0 {
-                    let across = bump(v / trail.thick);
                     let span = trail.head - trail.tail;
-                    if across > 0.0 && span > 0.5 && u >= trail.tail && u <= trail.head {
-                        let t = (u - trail.tail) / span;
-                        a += 0.8 * t * t * across * trail.level;
+                    if span > 0.5 {
+                        if let Some((dist, s)) = path.nearest(u, v, trail.tail, trail.head, trail.thick) {
+                            let t = (s - trail.tail) / span;
+                            a += 0.8 * t * t * bump(dist / trail.thick) * trail.level;
+                        }
                     }
-                    a += trail.level * blob(u - trail.head, v, trail.dot);
+                    let (hu, hv) = path.at(trail.head);
+                    a += trail.level * blob(u - hu, v - hv, trail.dot);
                 }
                 if spark.level > 0.0 {
-                    a += spark.level * sparkle(u - spark.du, v, spark.inner, spark.outer, 6.0);
+                    a += spark.level * sparkle(u - spark.du, v - spark.dv, spark.inner, spark.outer, 6.0);
                 }
                 a
             }

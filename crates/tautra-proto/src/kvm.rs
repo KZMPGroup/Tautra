@@ -142,6 +142,10 @@ pub enum KvmMessage {
         y: i32,
         edge: Option<CrossEdge>,
     },
+    Trail {
+        dx: i32,
+        dy: i32,
+    },
     Button {
         button: MouseButton,
         down: bool,
